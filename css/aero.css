@@ -18,8 +18,8 @@
   --green-1: #34a83f;
   --green-2: #137224;
   --line: #8dbbe0;
-  --glass: rgba(255, 255, 255, 0.74);
-  --glass-strong: rgba(255, 255, 255, 0.9);
+  --glass: rgba(255, 255, 255, 0.66); /* a touch more see-through so the animated sky glows through the panels */
+  --glass-strong: rgba(255, 255, 255, 0.84);
   --radius: 16px;
   --shadow: 0 8px 24px rgba(11, 70, 130, 0.25), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
   --font: "Myriad", "Frutiger", "Segoe UI", "Trebuchet MS", Tahoma, Verdana, sans-serif;
@@ -404,3 +404,99 @@ ul.plain { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 6
 .pulse-column i { display: block; width: 100%; background: #4c9470; border-radius: 3px 3px 0 0; }
 .memory-result { margin: 12px 0; overflow-wrap: anywhere; }
 .memory-result p { margin: 4px 0; }
+
+/* =====================================================================
+   Frutiger Aero scenery & polish (driven by js/fx.js)
+   Layers, back to front: sky 0 · sun/hills 1 · rising bubbles 2 · app 3 · 3D soap bubbles 4
+   ===================================================================== */
+#fx-sky, #fx-sun, #fx-hills, #fx-bubbles { position: fixed; pointer-events: none; }
+#fx-sky { inset: 0; z-index: 0; }
+#fx-bubbles { inset: 0; z-index: 2; }
+#fx-bubbles canvas { display: block; }
+#app { position: relative; z-index: 3; }
+#fx-orbs { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 4; pointer-events: none; }
+#fx-burst { position: fixed; inset: 0; z-index: 80; pointer-events: none; overflow: hidden; }
+#fx-burst i { position: absolute; border-radius: 50%; border: 1px solid rgba(255,255,255,.95);
+  background: radial-gradient(circle at 30% 28%, #fff 0 16%, rgba(196,238,255,.6) 46%, rgba(90,184,242,.38) 100%);
+  box-shadow: 0 0 8px rgba(120,205,255,.7); }
+
+/* sun glare + slowly turning rays, top-left like the classic Vista wallpaper */
+#fx-sun { z-index: 1; top: -22vmin; left: -22vmin; width: 78vmin; height: 78vmin; mix-blend-mode: screen;
+  background: radial-gradient(circle, rgba(255,255,236,.95) 0, rgba(255,248,200,.55) 13%, rgba(255,240,170,.18) 36%, transparent 62%);
+  animation: sun-pulse 7s ease-in-out infinite alternate; }
+#fx-sun::before { content: ""; position: absolute; inset: -30%; opacity: .5;
+  background: repeating-conic-gradient(from 0deg, rgba(255,255,255,.22) 0 3deg, transparent 3deg 13deg);
+  -webkit-mask-image: radial-gradient(circle, #000 0, transparent 62%); mask-image: radial-gradient(circle, #000 0, transparent 62%);
+  animation: sun-rays 140s linear infinite; }
+@keyframes sun-pulse { from { opacity: .8; transform: scale(.97); } to { opacity: 1; transform: scale(1.04); } }
+@keyframes sun-rays { to { transform: rotate(360deg); } }
+
+/* lush rolling hills along the bottom edge */
+#fx-hills { z-index: 1; left: 0; right: 0; bottom: 0; height: max(150px, 26vh); overflow: hidden; }
+#fx-hills svg { display: block; width: 100%; height: 100%; }
+.hill { animation: hill-sway 14s ease-in-out infinite alternate; }
+.hill.h1 { animation-duration: 19s; } .hill.h3 { animation-duration: 11s; animation-direction: alternate-reverse; }
+@keyframes hill-sway { from { transform: translateX(-14px); } to { transform: translateX(14px); } }
+
+.fx-off #fx-sky, .fx-off #fx-sun, .fx-off #fx-bubbles, .fx-off #fx-orbs { display: none; }
+
+/* effects + sound toggles: two little glass orbs, bottom-left */
+#fx-controls { position: fixed; left: 12px; bottom: 8px; z-index: 60; display: flex; gap: 6px; }
+.fx-btn { position: relative; width: 32px; height: 32px; padding: 0; border-radius: 50%; cursor: pointer; font-size: 15px; line-height: 1; color: var(--ink);
+  border: 1px solid #5b97c9; background: radial-gradient(circle at 32% 24%, #fff 0, #dff1ff 38%, #8cc9f4 100%);
+  box-shadow: 0 2px 6px rgba(11,70,130,.4), 0 1px 0 #fff inset; transition: transform .25s cubic-bezier(.34,1.56,.64,1), filter .15s; }
+.fx-btn:hover { transform: scale(1.15) translateY(-2px); filter: brightness(1.06); }
+.fx-btn:active { transform: scale(.95); }
+.fx-btn.off { filter: grayscale(.85) brightness(1.05); opacity: .8; }
+
+/* login: floating logo, chip-style bullets so copy stays legible over the live sky */
+.logo-tilt { display: inline-block; border-radius: 24px; }
+.logo-tilt .logo-img { animation: logo-float 5.5s ease-in-out infinite; }
+@keyframes logo-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+.login-hero .tagline { display: inline-block; background: rgba(255,255,255,.58); padding: 4px 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,.9); }
+.bullets li { width: fit-content; max-width: 100%; background: linear-gradient(180deg, rgba(255,255,255,.82), rgba(214,240,255,.6)); border: 1px solid rgba(255,255,255,.95); border-radius: 999px; padding: 5px 14px; box-shadow: 0 2px 6px rgba(11,70,130,.18); }
+
+/* footer sits over dark hills, so give it a glass pill */
+.footer { width: fit-content; max-width: 96vw; margin: 0 auto 4px; padding: 2px 16px; border-radius: 999px; background: rgba(255,255,255,.72); border: 1px solid rgba(255,255,255,.9); }
+
+/* Vista-style diagonal gloss across window chrome */
+.titlebar { background-image: linear-gradient(112deg, rgba(255,255,255,.6) 0 24%, rgba(255,255,255,0) 24%), linear-gradient(180deg, var(--glass-strong), var(--glass)); }
+.buddy-head { background: linear-gradient(112deg, rgba(255,255,255,.4) 0 30%, rgba(255,255,255,0) 30%), linear-gradient(180deg, #8fd2ff, #3a9be8); }
+.modal-title { background: linear-gradient(112deg, rgba(255,255,255,.4) 0 26%, rgba(255,255,255,0) 26%), linear-gradient(180deg, #8fd2ff, #3a9be8); }
+
+/* glossy sheen that sweeps across buttons on hover */
+.btn::after { content: ""; position: absolute; top: 0; bottom: 0; left: -70%; width: 45%; pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.7), transparent); transform: skewX(-20deg); transition: left .6s ease; }
+.btn:hover:not(:disabled)::after { left: 130%; }
+
+/* rail buttons become springy glass orbs */
+.rail-btn { position: relative; isolation: isolate; transition: transform .28s cubic-bezier(.34,1.56,.64,1), filter .15s, box-shadow .2s; }
+.rail-btn::before { content: ""; position: absolute; z-index: -1; left: 10%; right: 10%; top: 3px; height: 46%; border-radius: 14px 14px 50% 50%; background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.1)); }
+.rail-btn:hover { transform: translateY(-2px) scale(1.1); }
+.rail-btn:active { transform: scale(.94); }
+.rail-btn.active { animation: orb-glow 2.4s ease-in-out infinite alternate; }
+@keyframes orb-glow { from { box-shadow: 0 0 0 3px #fff, 0 0 8px 2px rgba(43,139,224,.6); } to { box-shadow: 0 0 0 3px #fff, 0 0 16px 6px rgba(43,139,224,.85); } }
+
+/* presence dots breathe softly; unread badges bob */
+.dot.online { animation: dot-breathe 3s ease-in-out infinite; }
+@keyframes dot-breathe { 0%, 100% { box-shadow: 0 1px 2px rgba(0,0,0,.3), inset 0 -3px 4px rgba(0,0,0,.15), 0 0 0 0 rgba(47,191,63,.55); } 50% { box-shadow: 0 1px 2px rgba(0,0,0,.3), inset 0 -3px 4px rgba(0,0,0,.15), 0 0 0 5px rgba(47,191,63,0); } }
+
+/* glossy progress meters: moving highlight */
+.meter i { background-image: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,0) 55%), linear-gradient(90deg, #a6f08f, #3dbb4a 55%, #27922f); }
+
+/* d3 bubble chart (Org pulse) */
+.bubble-chart { display: block; width: 100%; height: auto; max-height: 180px; margin: 8px 0 2px; border-radius: 14px; border: 1px solid #b9d8ee;
+  background: linear-gradient(180deg, rgba(255,255,255,.7), rgba(190,235,255,.45)); }
+.pb-float { animation: pb-bob 4s ease-in-out infinite alternate; }
+@keyframes pb-bob { from { transform: translateY(-3px); } to { transform: translateY(3px); } }
+
+/* vanilla-tilt glare should follow the card's rounded corners */
+.org-card, .event-card { will-change: transform; }
+.js-tilt-glare { border-radius: inherit; }
+
+@media (max-width: 760px) { #fx-controls { bottom: 52px; left: 8px; } }
+.pb-grid { stroke: rgba(11,70,130,.14); stroke-width: 1; stroke-dasharray: 3 5; }
+
+/* Inside the app, keep every bubble in the background: 3D bubbles drop behind the panels, small ones fade back. */
+html[data-view="app"] #fx-orbs { z-index: 1; }
+html[data-view="app"] #fx-bubbles { opacity: .6; }
