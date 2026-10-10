@@ -219,6 +219,26 @@ The aesthetic carries real function:
 - **Optional assistant mascot** in the spirit of early desktop helpers
 - **Accessibility:** strong text contrast, reduced-motion support, keyboard navigation
 
+### The Frutiger Aero scenery layer (`js/fx.js`)
+
+A living "blue skies and green hills" backdrop, built from local libraries in `js/vendor/` (no CDN, so it works offline):
+
+| Effect | Library |
+| --- | --- |
+| Animated sky and drifting clouds | Vanta.js + Three.js |
+| Iridescent 3D soap bubbles you can chase with the cursor or pop by clicking | Three.js (custom thin-film shader) |
+| Glossy bubbles rising behind the UI | tsParticles |
+| Page and card entrances, bubble bursts, chat message pop-in | GSAP |
+| 3D tilt and glare on cards and the logo | vanilla-tilt.js |
+| Bloops, clicks, pops and a welcome chime (synthesized by `scripts/make_sounds.py`) | Howler.js |
+| Org pulse as a glossy bubble chart | D3 |
+
+Plus CSS-only touches: Vista-style diagonal glass gloss, sun rays, sweeping button sheen, and springy glass-orb navigation.
+
+Judges' laptops come first: the two round buttons at the bottom-left turn the animated scenery and the sounds on or off
+(remembered per browser). Effects start **off** when the OS asks for reduced motion, and the sky automatically falls back to a
+static gradient if frames get slow or WebGL is unavailable. Meadow works fully without any of it.
+
 ---
 
 ## Privacy
