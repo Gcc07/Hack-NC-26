@@ -1,4 +1,5 @@
-# [Project Name]
+# Meadow
+### Meet Everyone, Anywhere, Doing Ordinary Wonders
 
 **Discord for student org event planning.**
 
