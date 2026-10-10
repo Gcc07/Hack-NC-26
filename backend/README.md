@@ -150,12 +150,15 @@ flask --app app tiger-init
 
 That command creates the hypertables, continuous aggregates, and search tables.
 Startup does not modify the database. `flask --app app tiger-index-memory` fills
-optional embeddings after `MEADOW_EMBEDDING_URL` and `MEADOW_EMBEDDING_MODEL` are set.
+optional Gemini embeddings after `GEMINI_API_KEY` is set.
 
 | Method | Path | Result |
 | --- | --- | --- |
 | GET | `/api/orgs/<id>/insights?days=14` | Hour-of-day activity, totals, preferred hours, check-ins |
 | GET | `/api/orgs/<id>/memory?q=pizza` | Org-scoped notes, handoffs, and summaries |
+| GET | `/api/ai/status` | Whether Gemini is configured (`GEMINI_API_KEY`) |
+| POST | `/api/ai/parse` | `{text}` → scheduling constraints JSON from Gemini |
+| POST | `/api/ai/polish` | `{text, instruction}` → rewritten text from Gemini |
 
 `days` is 1–90. Search `limit` is 1–30. Unknown orgs return 404. A missing or
 unreachable Tiger service returns 503 and does not include the connection string.

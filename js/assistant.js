@@ -5,9 +5,9 @@
  *  - Dewey only reads free/busy intervals, never calendar details (we never store them).
  *  - Every suggestion carries the reasoning produced by the deterministic scorer.
  *
- * Language understanding is a rule-based parser that works offline. If you add an
- * OpenAI-compatible API key in "Me > Assistant", the same functions are upgraded with an
- * LLM and fall back to the rules on any failure.
+ * Language understanding is a rule-based parser that works offline. If the server has
+ * GEMINI_API_KEY set in .env, the same functions are upgraded with Gemini (via /api/ai)
+ * and fall back to the rules on any failure.
  */
 (function () {
   const M = window.Meadow;
@@ -428,45 +428,39 @@
     return lines.join('\n');
   };
 
-  /* ---------------------------------------------------------------- optional LLM upgrade */
-  M.AI.llmConfig = () => {
-    try {
-      return JSON.parse(localStorage.getItem('meadow:llm')) || {};
-    } catch {
-      return {};
-    }
-  };
-  M.AI.llmEnabled = () => !!M.AI.llmConfig().key;
+  /* ---------------------------------------------------------------- optional Gemini upgrade */
+  // The Gemini key lives in the server's .env (GEMINI_API_KEY); the browser never sees it.
+  let llmOn = false;
+  M.AI.llmEnabled = () => llmOn;
+  M.AI.checkLLM = () =>
+    fetch('/api/ai/status', { cache: 'no-store', signal: AbortSignal.timeout(5000) })
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((d) => {
+        if (llmOn !== !!d.enabled) {
+          llmOn = !!d.enabled;
+          M.render && M.render();
+        }
+      })
+      .catch(() => {});
+  M.AI.checkLLM();
 
-  async function llm(system, user) {
-    const cfg = M.AI.llmConfig();
-    const res = await fetch((cfg.base || 'https://api.openai.com/v1') + '/chat/completions', {
+  async function ai(path, body) {
+    const res = await fetch('/api/ai/' + path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.key },
-      body: JSON.stringify({
-        model: cfg.model || 'gpt-4o-mini',
-        temperature: 0.2,
-        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(25000),
     });
-    if (!res.ok) throw new Error('LLM error ' + res.status);
-    const data = await res.json();
-    return data.choices[0].message.content;
+    if (!res.ok) throw new Error('Gemini error ' + res.status);
+    return res.json();
   }
 
-  /** parseRequest with an optional LLM pass layered on top of the rule-based result. */
+  /** parseRequest with an optional Gemini pass layered on top of the rule-based result. */
   M.AI.parseRequestSmart = async function (text, ctx) {
     const base = M.AI.parseRequest(text, ctx);
     if (!M.AI.llmEnabled()) return base;
     try {
-      const now = new Date();
-      const out = await llm(
-        'You convert scheduling requests into JSON. Today is ' + now.toDateString() + '. Reply with ONLY JSON: ' +
-          '{"mode":"officers"|"event","durationMin":number,"days":[0-6 (0=Sunday)],"hourStart":number,"hourEnd":number,' +
-          '"roles":[{"name":string,"headcount":number}],"title":string}. Use 24h decimal hours. Omit unknown fields.',
-        text
-      );
-      const j = JSON.parse(out.replace(/^```(?:json)?|```$/g, '').trim());
+      const j = (await ai('parse', { text })).result || {};
       const c = base.constraints;
       if (j.mode === 'officers' || j.mode === 'event') c.mode = j.mode;
       if (j.durationMin > 0) c.durationMin = Math.min(600, j.durationMin);
@@ -481,7 +475,7 @@
         }));
       }
       base.title = j.title || base.title;
-      base.understood.push('✨ refined by AI');
+      base.understood.push('✨ refined by Gemini');
     } catch (e) {
       /* fall back silently to the rule-based parse */
     }
@@ -491,7 +485,7 @@
   M.AI.polish = async function (text, instruction) {
     if (!M.AI.llmEnabled()) return text;
     try {
-      return (await llm('You are Dewey, a friendly assistant for a student org. ' + instruction + ' Keep it short.', text)).trim();
+      return (await ai('polish', { text, instruction })).text || text;
     } catch {
       return text;
     }

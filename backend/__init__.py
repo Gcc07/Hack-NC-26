@@ -38,8 +38,10 @@ def create_app(config=None, *, repository: Repository | None = None):
             raise ValueError("STORAGE_BACKEND must be memory or tiger.")
     app.extensions["repository"] = repository
     app.register_blueprint(api)
+    from .gemini import ai_api
     from .insights import insights_api
     from .tiger_cli import register_commands
+    app.register_blueprint(ai_api)
     app.register_blueprint(insights_api)
     register_commands(app)
 

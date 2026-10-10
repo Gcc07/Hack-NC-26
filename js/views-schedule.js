@@ -126,7 +126,7 @@
       h('div', { class: 'row tight' }, M.deweySvg(40), h('h2', null, 'Ask Dewey for a time')),
       h('p', { class: 'hint' }, 'Describe it in plain words, then tweak the details. Dewey proposes; officers decide. Scores come from a deterministic scheduler — no guessing.'),
       ask,
-      h('div', { class: 'row' }, h('button', { class: 'btn primary', onClick: askDewey }, '✨ Ask Dewey'), M.AI.llmEnabled() ? h('span', { class: 'chip free' }, 'LLM on') : h('span', { class: 'hint' }, 'Offline language parser (add an API key in Me → Assistant to upgrade)')),
+      h('div', { class: 'row' }, h('button', { class: 'btn primary', onClick: askDewey }, '✨ Ask Dewey'), M.AI.llmEnabled() ? h('span', { class: 'chip free' }, 'Gemini on') : h('span', { class: 'hint' }, 'Offline language parser (set GEMINI_API_KEY in .env to upgrade)')),
       sc.understood.length ? h('div', { class: 'understood' }, h('small', null, 'Dewey understood: '), sc.understood.map((u) => h('span', { class: 'chip' }, u))) : null,
       form,
       rolesBox,
