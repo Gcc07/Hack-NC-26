@@ -9,6 +9,45 @@
   const TAGLINE = 'Meet Everyone, Anywhere, Doing Ordinary Wonders';
 
   /* ------------------------------------------------------------------ login */
+  /* Stacked bars whose right edges ripple like a vertical sine wave down the screen.
+     Palette (light -> dark): #cdf2ff, #b4dee6, #4aaae6, #318dde. */
+  const PALETTE = ['#cdf2ff', '#b4dee6', '#4aaae6', '#318dde'];
+  const mix = (a, b, t) => {
+    const p = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    const [r1, g1, b1] = p(a);
+    const [r2, g2, b2] = p(b);
+    return `rgb(${Math.round(r1 + (r2 - r1) * t)},${Math.round(g1 + (g2 - g1) * t)},${Math.round(b1 + (b2 - b1) * t)})`;
+  };
+  const paletteAt = (t) => {
+    const x = Math.min(0.999, Math.max(0, t)) * (PALETTE.length - 1);
+    const i = Math.floor(x);
+    return mix(PALETTE[i], PALETTE[i + 1], x - i);
+  };
+
+  V.waveBackdrop = function () {
+    const BARS = 16;
+    const PERIODS = 6; // over a 200-unit tall canvas = 3 periods per screen height, so the drift loops seamlessly
+    let paths = '';
+    for (let i = BARS - 1; i >= 0; i--) {
+      const t = i / (BARS - 1); // 0 = far left/lightest, 1 = wave edge/darkest
+      const base = 10 + t * 74;
+      const amp = 2.4 + t * 3.2;
+      const phase = i * 0.32;
+      let d = 'M0,0';
+      for (let y = 0; y <= 200; y += 1) {
+        const x = base + amp * Math.sin((y / 200) * PERIODS * 2 * Math.PI + phase);
+        d += ` L${x.toFixed(2)},${y}`;
+      }
+      d += ' L0,200 Z';
+      paths += `<path d="${d}" fill="${paletteAt(t)}" stroke="rgba(255,255,255,${(0.25 + t * 0.4).toFixed(2)})" stroke-width="1"/>`;
+    }
+    const wrap = document.createElement('div');
+    wrap.className = 'wave-bg';
+    wrap.setAttribute('aria-hidden', 'true');
+    wrap.innerHTML = `<svg viewBox="0 0 100 200" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">${paths}</svg>`;
+    return wrap;
+  };
+
   V.login = function () {
     const pending = sessionStorage.getItem('meadow:pendingJoin');
     const profiles = Object.values(S().users).filter((u) => !u.placeholder).sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
@@ -28,6 +67,7 @@
     return h(
       'div',
       { class: 'login' },
+      V.waveBackdrop(),
       h(
         'div',
         { class: 'login-hero' },
@@ -132,9 +172,9 @@
       [orgs.length > 0, 'Join or create an org', 'Use an invite link from your officers, or start your own.', () => V.orgModal()],
       [orgs.some((o) => Object.values(state.events).some((e) => e.orgId === o.id && Object.values(e.roles).some((r) => r.claims.includes(me.id)))), 'Claim a role', 'Find an event that needs people and take a shift.', () => orgs[0] && M.go('#/o/' + orgs[0].id + '/events')],
     ];
-    return h(
+    const page = h(
       'div',
-      { class: 'main-scroll pad', 'data-scroll': 'main' },
+      { class: 'main-scroll pad home-content', 'data-scroll': 'main' },
       h('h1', null, `Hi ${M.firstName(me.name)}! `, h('span', { class: 'wave' }, '👋')),
       h('p', { class: 'lede' }, 'Welcome to Meadow — where student orgs figure out when, where, and who.'),
       h('section', { class: 'card' },
@@ -171,6 +211,7 @@
           } }, hasDemo ? '↻ Reload demo org' : '✨ Load demo org')),
       )
     );
+    return h('div', { class: 'home-wrap' }, V.waveBackdrop(), page);
   };
 
   /* ------------------------------------------------------------------ buddy list (presence, away messages, friends) */
