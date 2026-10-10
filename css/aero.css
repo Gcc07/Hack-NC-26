@@ -195,6 +195,19 @@ button.chip:hover { background: #d4eaff; }
 .wave { display: inline-block; animation: wave 2s ease-in-out infinite; transform-origin: 70% 70%; }
 @keyframes wave { 0%, 60%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(16deg); } 20%, 40% { transform: rotate(-8deg); } }
 
+/* ---------- landing: vertical sine-wave bars ---------- */
+.login { position: relative; }
+.login > .login-hero, .login > .login-card { position: relative; z-index: 1; }
+.wave-bg { position: fixed; left: 0; top: 0; bottom: 0; width: 48vw; z-index: 0; pointer-events: none; overflow: hidden; }
+.wave-bg svg { display: block; width: 100%; height: 200%; animation: wave-drift 22s linear infinite; }
+@keyframes wave-drift { to { transform: translateY(-16.6667%); } } /* exactly one wave period */
+/* signed-in home: same wave, contained in the window */
+.home-wrap { position: relative; flex: 1; min-height: 0; display: flex; overflow: hidden; --wave-w: clamp(90px, 16%, 190px); }
+.home-wrap .wave-bg { position: absolute; width: var(--wave-w); }
+.home-content { position: relative; z-index: 1; flex: 1; padding-left: calc(var(--wave-w) + 10px); }
+.wave-bg path { vector-effect: non-scaling-stroke; }
+@media (max-width: 960px) { .wave-bg { width: 20vw; opacity: .85; } }
+
 /* ---------- home ---------- */
 .steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .steps li { display: flex; align-items: center; gap: 12px; }
@@ -372,7 +385,7 @@ ul.plain { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 6
   .channel { width: auto; white-space: nowrap; }
   .tagline-sm { display: none; }
   .tab { padding: 6px 10px; }
-}
+  }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
