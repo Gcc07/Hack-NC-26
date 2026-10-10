@@ -117,7 +117,7 @@ Calendar service    Scheduling engine   AI assistant
 
 ### Proposed stack
 - **Backend:** Flask (Python); the initial API is in `backend/`
-- **Storage:** in-memory today; **Tiger Data (Tiger Cloud, PostgreSQL)** is the durable store and analytics layer, added behind the existing storage interface. The in-memory adapter stays as an offline fallback for local development.
+- **Storage:** in-memory by default. The Tiger Data adapter (Tiger Cloud, PostgreSQL with TimescaleDB) is the durable store and analytics layer, behind the same storage interface. In-memory storage stays available for local development without an account.
 - **Realtime chat and presence:** Redis Pub/Sub with WebSockets (live fan-out only; Tiger holds the history)
 - **Calendar:** Google Calendar API + an ICS parser
 - **AI:** an LLM API for parsing, drafting, and summarizing
@@ -249,15 +249,22 @@ With the default in-memory storage, data resets when the process restarts. The A
 without authentication. See [backend/README.md](backend/README.md) for endpoints,
 examples, and the storage interface used by the Tiger Data adapter.
 
-### Using Tiger Data (planned)
+### Using Tiger Data
 
-To run against Tiger Cloud, create a service, copy its PostgreSQL connection string into a local
-`.env` (never commit it), and select the Tiger adapter. `.env.example` will carry placeholder values only:
+Create a Tiger Cloud service with PostgreSQL 17+ and TimescaleDB enabled. Copy `.env.example` to
+`.env` (never commit it), set the connection string, and install the schema once:
 
 ```sh
+STORAGE_BACKEND=tiger
 DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<db>?sslmode=require
-STORAGE_BACKEND=tiger   # default: memory
+flask --app app tiger-init
 ```
+
+The app then stores shared Meadow data in Tiger and the Board tab reads activity from the
+hypertables. Guestbook notes, event descriptions, officer handoffs, and Dewey summaries are
+searchable there. Keyword search works immediately. Semantic search is optional: set
+`MEADOW_EMBEDDING_URL` and `MEADOW_EMBEDDING_MODEL`, then run `flask --app app tiger-index-memory`.
+Leave `STORAGE_BACKEND=memory` to run with no database. Cloud forks are not wired up.
 
 ### Browser demo
 
@@ -295,12 +302,12 @@ rule afterward does not remove it from history.
 
 - [ ] Auth and calendar import (Google + ICS)
 - [ ] Orgs, officer/member permissions, and event roles
-- [ ] Tiger Data adapter behind the storage interface (hypertables for busy slots, messages, presence)
+- [x] Tiger Data adapter behind the storage interface (hypertables for busy slots, messages, presence)
 - [ ] Scheduling engine with ranked suggestions and role coverage
-- [ ] Continuous aggregate for org activity (preferred-hours signal)
+- [x] Continuous aggregates for org activity, with the Board reading hypertables so the latest hour still shows up
 - [ ] Group chat with presence
 - [ ] AI assistant for parsing and nudges
-- [ ] Hybrid search over guestbook and event notes (officer handoff)
+- [x] Hybrid search over guestbook and event notes (officer handoff)
 - [ ] Messaging bridge (GroupMe or SMS)
 - [ ] Flares, buddy list, guestbook, and officer handoff
 
@@ -311,7 +318,7 @@ rule afterward does not remove it from history.
 - What is the best demo moment? (e.g. a tabler cancels, the assistant finds a replacement, and a member claims the shift live)
 - Which org type do we design around first: a club with weekly meetings, a Greek or service org, or a project team?
 - Which bridge do we build: GroupMe or SMS?
-- Which Tiger features make the cut for the demo: hybrid search, activity aggregates, or forks?
+- Should the demo use Tiger Cloud forks to reset the org, or is the in-memory reset enough?
 
 ---
 

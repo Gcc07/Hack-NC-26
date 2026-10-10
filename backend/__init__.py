@@ -1,5 +1,7 @@
 """Run locally with: python -m flask --app backend run --port 5000."""
 
+from __future__ import annotations
+
 from pathlib import Path
 import os
 
@@ -42,13 +44,23 @@ def create_app(config=None, *, repository: Repository | None = None):
     register_commands(app)
 
     # Connection errors never echo a database URL or password into a response.
-    import psycopg
+    from .tiger_repository import TigerUnavailable
 
-    @app.errorhandler(psycopg.Error)
-    def database_error(error):
-        app.logger.warning("Tiger database request failed (%s)", type(error).__name__)
-        return jsonify(error={"code": "storage_unavailable", "message":
-            "Tiger Data is unavailable or not initialized. Check .env and run flask --app app tiger-init."}), 503
+    @app.errorhandler(TigerUnavailable)
+    def tiger_unavailable(error):
+        app.logger.warning("Tiger database request failed (%s)", error.detail or type(error).__name__)
+        return jsonify(error={"code": "storage_unavailable", "message": str(error)}), 503
+
+    try:
+        import psycopg
+    except ImportError:
+        psycopg = None
+    if psycopg is not None:
+        @app.errorhandler(psycopg.Error)
+        def database_error(error):
+            app.logger.warning("Tiger database request failed (%s)", type(error).__name__)
+            return jsonify(error={"code": "storage_unavailable", "message":
+                "Tiger Data is unavailable or not initialized. Check .env and run flask --app app tiger-init."}), 503
 
     @app.get("/")
     def index():

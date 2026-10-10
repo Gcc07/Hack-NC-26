@@ -12,27 +12,43 @@ def _values(value):
 
 
 def memory_documents(state):
-    orgs = {o['id'] for o in _values(state.get('orgs', {}))}
-    events = {e['id']: e for e in _values(state.get('events', {})) if e.get('orgId') in orgs}
+    org_rows = [org for org in _values(state.get('orgs', {})) if isinstance(org, dict) and org.get('id')]
+    orgs = {org['id']: org for org in org_rows}
+    events = {event['id']: event for event in _values(state.get('events', {}))
+              if isinstance(event, dict) and event.get('id') and event.get('orgId') in orgs}
     docs = []
-    def add(key, org, event, source, title, text):
+    def add(key, org, event, source, title, text, page=None):
         if org not in orgs or not isinstance(text, str) or not text.strip():
             return
+        if event:
+            suffix = '/events/' + quote(event, safe='')
+        elif page:
+            suffix = '/' + page
+        else:
+            suffix = '/chat'
         docs.append(dict(id=key, org_id=org, event_id=event, source=source,
                          title=title, body=text.strip(),
-                         url='#/o/' + quote(org, safe='') + ('/events/' + quote(event, safe='') if event else '/chat')))
+                         url='#/o/' + quote(org, safe='') + suffix))
     for event in events.values():
-        add('event:' + event['id'], event['orgId'], event['id'], 'event', event['title'],
+        add('event:' + event['id'], event['orgId'], event['id'], 'event', event.get('title') or 'Event',
             event.get('description', ''))
+    for org in orgs.values():
+        handoff = org.get('handoff') if isinstance(org.get('handoff'), dict) else {}
+        add('handoff:' + org['id'], org['id'], None, 'handoff',
+            (org.get('name') or 'Organization') + ' — officer handoff', handoff.get('text', ''), 'board')
     for note in _values(state.get('guestbook', [])):
+        if not isinstance(note, dict) or not note.get('id'):
+            continue
         event = events.get(note.get('eventId'))
         if event:
             add('guestbook:' + note['id'], event['orgId'], event['id'], 'guestbook',
-                event['title'] + ' — guestbook', note.get('text', ''))
+                (event.get('title') or 'Event') + ' — guestbook', note.get('text', ''))
     for message in _values(state.get('messages', [])):
+        if not isinstance(message, dict) or not message.get('id'):
+            continue
         text = message.get('text', '')
         payload = message.get('payload') or {}
-        if message.get('source') != 'assistant' or not (payload.get('type') == 'summary' or text.startswith('**Summary**')):
+        if message.get('source') != 'assistant' or not (payload.get('type') == 'summary' or (isinstance(text, str) and text.startswith('**Summary**'))):
             continue
         kind, _, target = message.get('channel', '').partition(':')
         event = events.get(target) if kind == 'event' else None
@@ -40,7 +56,7 @@ def memory_documents(state):
         if kind == 'event' and not event:
             continue
         add('summary:' + message['id'], org, event['id'] if event else None,
-            'summary', (event['title'] if event else 'Organization chat') + ' — summary', text)
+            'summary', ((event.get('title') if event else None) or 'Organization chat') + ' — summary', text)
     return docs
 
 

@@ -138,3 +138,24 @@ python scripts/browser_smoke.py
 
 This starts its own temporary server and checks shared chat across independent
 browser sessions, reload persistence, and recovery after a failed save.
+
+## Tiger Data
+
+The default `STORAGE_BACKEND=memory` needs no database. To use Tiger Cloud, copy
+`.env.example` to `.env`, set `STORAGE_BACKEND=tiger` and `DATABASE_URL`, then run:
+
+```sh
+flask --app app tiger-init
+```
+
+That command creates the hypertables, continuous aggregates, and search tables.
+Startup does not modify the database. `flask --app app tiger-index-memory` fills
+optional embeddings after `MEADOW_EMBEDDING_URL` and `MEADOW_EMBEDDING_MODEL` are set.
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/api/orgs/<id>/insights?days=14` | Hour-of-day activity, totals, preferred hours, check-ins |
+| GET | `/api/orgs/<id>/memory?q=pizza` | Org-scoped notes, handoffs, and summaries |
+
+`days` is 1–90. Search `limit` is 1–30. Unknown orgs return 404. A missing or
+unreachable Tiger service returns 503 and does not include the connection string.

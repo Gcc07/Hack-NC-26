@@ -3,10 +3,24 @@ from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import math
-from .repository import InMemoryRepository
+from .repository import RESOURCES, InMemoryRepository
 
 class TigerUnavailable(RuntimeError):
     """Safe diagnostic without database credentials."""
+
+    def __init__(self, message, *, detail=""):
+        super().__init__(message)
+        self.detail = detail
+
+def split_sql(script):
+    """psycopg executes one statement at a time."""
+    lines = []
+    for line in script.splitlines():
+        comment = line.find("--")
+        if comment >= 0:
+            line = line[:comment]
+        lines.append(line)
+    return [part.strip() for part in "\n".join(lines).split(";") if part.strip()]
 
 def timestamp(value, fallback=None):
     try:
@@ -34,33 +48,53 @@ class TigerRepository:
         self._database_url, self._connect_timeout = database_url, connect_timeout
 
     @contextmanager
-    def connection(self):
+    def connection(self, *, autocommit=False):
         try:
             import psycopg
             from psycopg.rows import dict_row
         except ImportError:
             raise TigerUnavailable("Install backend requirements to enable Tiger Data.") from None
         try:
-            with psycopg.connect(self._database_url, connect_timeout=self._connect_timeout, row_factory=dict_row) as conn:
+            with psycopg.connect(self._database_url, connect_timeout=self._connect_timeout, row_factory=dict_row, autocommit=autocommit) as conn:
                 conn.execute("SET TIME ZONE 'UTC'")
                 yield conn
-        except psycopg.Error:
-            raise TigerUnavailable("Tiger Data operation failed. Check connectivity and run init-tiger on a supported Tiger Cloud service.") from None
+        except psycopg.Error as error:
+            diag = getattr(error, "diag", None)
+            primary = getattr(diag, "message_primary", None) if diag else None
+            detail = primary[:300] if isinstance(primary, str) and "://" not in primary and "password" not in primary.lower() else ""
+            raise TigerUnavailable("Tiger Data operation failed. Check connectivity and run flask --app app tiger-init on a Tiger Cloud service with TimescaleDB.", detail=detail) from None
 
     def initialize(self):
+        """Install hypertables and search tables. Safe to run again."""
         from psycopg.types.json import Jsonb
         from .tiger_search import init_search_schema
+        script = Path(__file__).with_name("sql").joinpath("001_tiger.sql").read_text()
+        # Timescale DDL is applied one statement at a time, outside a wrapping transaction.
+        with self.connection(autocommit=True) as conn:
+            for statement in split_sql(script):
+                conn.execute(statement)
         with self.connection() as conn:
-            conn.execute(Path(__file__).with_name("sql").joinpath("001_tiger.sql").read_text())
             initial = InMemoryRepository().snapshot()
             conn.execute("INSERT INTO meadow_state(singleton,document,revision,instance) VALUES(true,%s,0,%s) ON CONFLICT DO NOTHING", (Jsonb(initial["state"]), initial["instance"]))
             init_search_schema(conn)
 
     def _load(self, conn, *, lock=False):
         row = conn.execute("SELECT document,revision,instance FROM meadow_state WHERE singleton" + (" FOR UPDATE" if lock else "")).fetchone()
-        if row is None: raise TigerUnavailable("Tiger schema is not initialized. Run init-tiger.")
+        if row is None: raise TigerUnavailable("Tiger schema is not initialized. Run flask --app app tiger-init.")
         memory = InMemoryRepository()
-        memory._records = {name: {r["id"]: r for r in (values.values() if isinstance(values, dict) else values)} for name, values in row["document"].items()}
+        document = row["document"] if isinstance(row["document"], dict) else {}
+        records = {}
+        for name in RESOURCES:
+            values = document.get(name, [] if name in ("friendships", "messages", "guestbook") else {})
+            entries = values.values() if isinstance(values, dict) else values if isinstance(values, list) else []
+            records[name] = {}
+            for index, record in enumerate(entries):
+                if not isinstance(record, dict): continue
+                record_id = record.get("id")
+                if not isinstance(record_id, str) or not record_id:
+                    record_id = f"{record.get('a', '')}:{record.get('b', '')}:{index}" if name == "friendships" else f"{name}:{index}"
+                records[name][record_id] = record
+        memory._records = records
         memory._revision, memory._instance = row["revision"], row["instance"]
         return memory
 
@@ -114,8 +148,9 @@ class TigerRepository:
                     commitments.setdefault(uid, []).append([role.get("start", event.get("start")), role.get("end", event.get("end"))])
         with conn.cursor() as cur:
             memberships = [(oid,uid,member.get("role", "Member")) for oid,org in orgs.items() for uid,member in org.get("members", {}).items() if isinstance(member, dict)]
-            cur.executemany("INSERT INTO meadow_org_members(org_id,user_id,role) VALUES(%s,%s,%s)", memberships)
-            cur.executemany("INSERT INTO meadow_busy_slots(user_id,slot_start) VALUES(%s,%s)", [(uid,slot) for uid,user in users.items() for slot in busy_slots(user,now,commitments.get(uid, []))])
+            slots = [(uid,slot) for uid,user in users.items() for slot in busy_slots(user,now,commitments.get(uid, []))]
+            if memberships: cur.executemany("INSERT INTO meadow_org_members(org_id,user_id,role) VALUES(%s,%s,%s)", memberships)
+            if slots: cur.executemany("INSERT INTO meadow_busy_slots(user_id,slot_start) VALUES(%s,%s)", slots)
         for oid,uid,_ in memberships:
             user = users.get(uid)
             if not user: continue
@@ -123,12 +158,18 @@ class TigerRepository:
             new_membership = uid not in old["orgs"].get(oid, {}).get("members", {})
             if new_membership or before.get("presence") != user.get("presence"):
                 conn.execute("INSERT INTO meadow_presence_events(user_id,org_id,observed_at,presence) VALUES(%s,%s,%s,%s) ON CONFLICT DO NOTHING", (uid,oid,now,user.get("presence", "offline")))
-        for message in state["messages"]:
+        messages = state["messages"].values() if isinstance(state["messages"], dict) else state["messages"]
+        live_ids = []
+        for message in messages:
+            if not isinstance(message, dict) or not isinstance(message.get("id"), str) or not message["id"]: continue
             channel = message.get("channel", "")
             kind, _, target = channel.partition(":")
             oid = target if kind == "org" else events.get(target, {}).get("orgId") if kind == "event" else None
-            created = timestamp(message.get("ts"), timestamp(message.get("createdAt"), now))
+            # created_at is part of the hypertable key, so a missing timestamp must stay stable across saves.
+            created = timestamp(message.get("ts"), timestamp(message.get("createdAt"))) or datetime.fromtimestamp(0, timezone.utc)
+            live_ids.append(message["id"])
             conn.execute("INSERT INTO meadow_messages(id,org_id,channel,user_id,body,source,payload,created_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(id,created_at) DO UPDATE SET body=EXCLUDED.body,source=EXCLUDED.source,payload=EXCLUDED.payload,org_id=EXCLUDED.org_id,user_id=EXCLUDED.user_id,channel=EXCLUDED.channel", (message["id"],oid,channel,message.get("userId"),message.get("text", ""),message.get("source", "app"),Jsonb(message.get("payload")),created))
+        conn.execute("DELETE FROM meadow_messages WHERE NOT (id = ANY(%s::text[]))", (live_ids,))
         for eid in old["events"].keys() - events.keys():
             conn.execute("DELETE FROM meadow_checkins WHERE event_id=%s", (eid,))
             conn.execute("DELETE FROM meadow_messages WHERE channel=%s", ("event:" + eid,))
