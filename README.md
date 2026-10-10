@@ -168,15 +168,15 @@ The aesthetic carries real function:
 
 ## Getting Started
 
-```bash
-# placeholder: fill in once the project is scaffolded
-git clone <repo-url>
-cd <project>
-cp .env.example .env   # add Google OAuth and API keys
-# install dependencies and run
+The web app is static HTML/CSS/JS with no install step. Data lives in the browser's `localStorage`, so several tabs act like several people on one server.
+
+```powershell
+./serve.ps1          # serves http://localhost:8080 (or just open index.html)
 ```
 
-Never commit `.env` or any API keys.
+Click **Launch the demo org**, then use the buddy list's "Demo: be someone else" to open other members in new tabs. Optional Google sign-in / calendar import: set `GOOGLE_CLIENT_ID` in `js/config.js`. Optional LLM upgrade for Dewey: add a key under Me → Assistant (stored only in your browser).
+
+Never commit API keys or client secrets.
 
 ---
 
