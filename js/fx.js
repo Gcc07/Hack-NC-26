@@ -70,16 +70,31 @@
     el.innerHTML =
       '<svg viewBox="0 0 1440 320" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">' +
       '<defs>' +
-      '<linearGradient id="hill-a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a6ec8c"/><stop offset="1" stop-color="#55c84c"/></linearGradient>' +
+      '<linearGradient id="hill-far" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c8f3a8"/><stop offset="1" stop-color="#7ed56a"/></linearGradient>' +
+      '<linearGradient id="hill-a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a6ec8c"/><stop offset=".55" stop-color="#62c84c"/><stop offset="1" stop-color="#3aa83a"/></linearGradient>' +
       '<linearGradient id="hill-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6fd656"/><stop offset="1" stop-color="#2f9e2f"/></linearGradient>' +
       '<linearGradient id="hill-c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3dba3a"/><stop offset="1" stop-color="#137224"/></linearGradient>' +
       '</defs>' +
-      '<g class="hill h1"><path d="M-40,180 C240,110 480,230 720,170 C960,110 1200,200 1480,140 L1480,320 L-40,320Z" fill="url(#hill-a)" opacity=".85"/>' +
+      '<g class="hill h0"><path d="M-40,155 C180,95 420,190 700,130 C980,70 1220,160 1480,105 L1480,320 L-40,320Z" fill="url(#hill-far)" opacity=".7"/>' +
+      '<path d="M-40,155 C180,95 420,190 700,130 C980,70 1220,160 1480,105" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1.5"/></g>' +
+      '<g class="hill h1"><path d="M-40,180 C240,110 480,230 720,170 C960,110 1200,200 1480,140 L1480,320 L-40,320Z" fill="url(#hill-a)" opacity=".92"/>' +
       '<path d="M-40,180 C240,110 480,230 720,170 C960,110 1200,200 1480,140" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="2"/></g>' +
       '<g class="hill h2"><path d="M-40,230 C200,190 420,270 700,225 C980,180 1200,260 1480,215 L1480,320 L-40,320Z" fill="url(#hill-b)"/>' +
       '<path d="M-40,230 C200,190 420,270 700,225 C980,180 1200,260 1480,215" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="2"/></g>' +
       '<g class="hill h3"><path d="M-40,275 C260,245 520,300 820,270 C1100,240 1300,295 1480,265 L1480,320 L-40,320Z" fill="url(#hill-c)"/></g>' +
       '</svg>';
+  }
+
+  function buildFlowers() {
+    const el = $('#fx-flowers');
+    if (!el) return;
+    const spots = [
+      [8, 78, 1], [18, 86, 0.75], [29, 82, 0.95], [41, 90, 0.7],
+      [54, 84, 1.05], [67, 88, 0.8], [78, 80, 0.9], [88, 86, 0.7], [96, 82, 0.85],
+    ];
+    el.innerHTML = spots.map(([x, y, s], i) =>
+      '<i class="bloom b' + (i % 3) + '" style="left:' + x + '%;bottom:' + (100 - y) + '%;--s:' + s + ';animation-delay:' + (-i * 0.7) + 's"></i>'
+    ).join('');
   }
 
   /* ================================================================== rising bubbles: tsParticles */
@@ -93,6 +108,51 @@
       "<ellipse cx='33' cy='27' rx='15' ry='8' fill='url(#h)' transform='rotate(-35 33 27)'/>" +
       "<ellipse cx='68' cy='76' rx='9' ry='4.5' fill='url(#h)' opacity='.6' transform='rotate(-35 68 76)'/></svg>";
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
+  /* Smooth cursor avoidance for the small bubbles: the pointer is low-pass filtered, push strength fades in with a
+     smoothstep curve, and each bubble's push velocity eases toward its target. No impulses, so nothing ever snaps. */
+  const pointer = { x: -9999, y: -9999, sx: -9999, sy: -9999, seen: false };
+  window.addEventListener('pointermove', (e) => {
+    pointer.x = e.clientX; pointer.y = e.clientY;
+    if (!pointer.seen) { pointer.seen = true; pointer.sx = e.clientX; pointer.sy = e.clientY; }
+  }, { passive: true });
+
+  /* Desk + meadow lean with the cursor. CSS variables survive the app's full re-renders. */
+  let leanRaf = 0;
+  function leanLoop() {
+    leanRaf = requestAnimationFrame(leanLoop);
+    if (!pointer.seen) return;
+    const dt = 0.016;
+    pointer.sx += (pointer.x - pointer.sx) * Math.min(1, dt * 8);
+    pointer.sy += (pointer.y - pointer.sy) * Math.min(1, dt * 8);
+    if (reduced) return;
+    const nx = (pointer.sx / Math.max(1, window.innerWidth)) * 2 - 1;
+    const ny = (pointer.sy / Math.max(1, window.innerHeight)) * 2 - 1;
+    const root = document.documentElement;
+    root.style.setProperty('--meadow-shift', (nx * -18).toFixed(1) + 'px');
+  }
+  const dodge = { raf: 0, last: 0, push: new WeakMap() };
+  function dodgeLoop(now) {
+    if (!bubbles) return;
+    dodge.raf = requestAnimationFrame(dodgeLoop);
+    if (document.hidden || !pointer.seen) { dodge.last = 0; return; }
+    const dt = dodge.last ? Math.min(0.05, (now - dodge.last) / 1000) : 0.016;
+    dodge.last = now;
+    for (const p of bubbles.particles.filter(() => true)) {
+      const v = dodge.push.get(p) || { x: 0, y: 0 };
+      const r = p.getRadius ? p.getRadius() : 20;
+      const dx = p.position.x - pointer.sx, dy = p.position.y - pointer.sy, d = Math.hypot(dx, dy), reach = r + 140;
+      let tx = 0, ty = 0;
+      if (d < reach && d > 0.5) {
+        const t = 1 - d / reach, f = t * t * (3 - 2 * t) * 280; // px/s at the centre of the effect
+        tx = (dx / d) * f; ty = (dy / d) * f;
+      }
+      const ease = Math.min(1, dt * 6);
+      v.x += (tx - v.x) * ease; v.y += (ty - v.y) * ease;
+      p.position.x += v.x * dt; p.position.y += v.y * dt;
+      dodge.push.set(p, v);
+    }
   }
 
   let bubbles = null;
@@ -110,12 +170,12 @@
         options: {
           fullScreen: { enable: false },
           background: { color: 'transparent' },
-          fpsLimit: 45,
+          fpsLimit: 60,
           detectRetina: false,
           particles: {
-            number: { value: 11, limit: { value: 16, mode: 'delete' } },
-            opacity: { value: { min: 0.35, max: 0.85 } },
-            size: { value: { min: 10, max: 52 } },
+            number: { value: 8, limit: { value: 10, mode: 'delete' } },
+            opacity: { value: { min: 0.3, max: 0.75 } },
+            size: { value: { min: 8, max: 30 } },
             shape: {
               type: 'image',
               options: { image: TINTS.map((t) => ({ src: bubbleSprite(t), width: 100, height: 100, replaceColor: false })) },
@@ -124,24 +184,21 @@
               enable: true, direction: 'top', speed: { min: 0.35, max: 1.2 }, straight: false,
               outModes: { default: 'out' },
             },
-            wobble: { enable: true, distance: 14, speed: { min: -2, max: 2 } },
+            wobble: { enable: true, distance: 6, speed: { min: -1, max: 1 } },
           },
-          interactivity: {
-            detectsOn: 'window',
-            events: { onHover: { enable: true, mode: 'repulse' } }, // no click-spawning: it cluttered the working screens
-            modes: { repulse: { distance: 110, duration: 0.5 } },
-          },
+          // No built-in interactivity: tsParticles' repulse snaps bubbles on contact. We ease them away ourselves (below).
         },
       });
-      if (!fx.visual) c && c.destroy(); else bubbles = c;
+      if (!fx.visual) { c && c.destroy(); } else { bubbles = c; dodge.last = 0; dodge.raf = requestAnimationFrame(dodgeLoop); }
     } catch (e) { warn('bubbles', e); } finally { bubblesLoading = false; }
   }
   function stopBubbles() {
+    cancelAnimationFrame(dodge.raf);
     if (bubbles) { try { bubbles.destroy(); } catch { /* ignore */ } bubbles = null; }
   }
 
   /* ================================================================== 3D soap bubbles: Three.js */
-  const orbs = { running: false, raf: 0, list: [], renderer: null, scene: null, camera: null, uniforms: { uTime: { value: 0 }, uMul: { value: 1 } }, mouse: { x: 0, y: 0, nx: 0, ny: 0 }, halfW: 6, halfH: 3.6, last: 0, slow: 0 };
+  const orbs = { running: false, raf: 0, list: [], renderer: null, scene: null, camera: null, uniforms: { uTime: { value: 0 }, uMul: { value: 1 } }, mouse: { x: 0, y: 0, nx: 0, ny: 0, cx: 0, cy: 0, seen: false }, halfW: 6, halfH: 3.6, last: 0, slow: 0 };
   const ORB_COUNT = 3;
 
   const ORB_VERT = [
@@ -223,8 +280,10 @@
     orbs.list.forEach((o) => respawn(o, true));
     window.addEventListener('resize', sizeOrbs);
     window.addEventListener('pointermove', (e) => {
-      orbs.mouse.nx = (e.clientX / window.innerWidth) * 2 - 1;
-      orbs.mouse.ny = -((e.clientY / window.innerHeight) * 2 - 1);
+      const m = orbs.mouse;
+      m.nx = (e.clientX / window.innerWidth) * 2 - 1;
+      m.ny = -((e.clientY / window.innerHeight) * 2 - 1);
+      if (!m.seen) { m.seen = true; m.cx = m.nx; m.cy = m.ny; } // start the smoothed cursor where the mouse is: no first-move kick
     }, { passive: true });
     return true;
   }
@@ -236,7 +295,9 @@
     orbs.camera.position.x = m.x * 0.5;
     orbs.camera.position.y = m.y * 0.3;
     orbs.camera.lookAt(0, 0, 0);
-    const cx = m.nx * orbs.halfW, cy = m.ny * orbs.halfH; // cursor in world space (z = 0 plane)
+    // Low-pass filtered cursor (world space, z = 0 plane): fast flicks of the mouse can't cause a sudden shove.
+    if (m.seen) { m.cx += (m.nx - m.cx) * Math.min(1, dt * 8); m.cy += (m.ny - m.cy) * Math.min(1, dt * 8); }
+    const cx = m.cx * orbs.halfW, cy = m.cy * orbs.halfH;
     for (const o of orbs.list) {
       if (o.pop >= 0) { // popping: swell + fade, then reborn at the bottom
         o.pop += dt / 0.28;
@@ -244,12 +305,15 @@
         o.mesh.material.uniforms.uPop.value = o.pop;
         if (o.pop >= 1) respawn(o, false);
       } else {
-        const dx = o.x - cx, dy = o.y - cy, d2 = dx * dx + dy * dy, reach = 1.4 + o.r;
-        if (d2 < reach * reach && d2 > 1e-4) { // bubbles drift away from the cursor
-          const d = Math.sqrt(d2), f = (1 - d / reach) * 2.2;
-          o.vx += (dx / d) * f * dt * 6; o.vy += (dy / d) * f * dt * 6;
+        // Bubbles glide away from the cursor: push strength follows a smoothstep falloff and velocity eases toward it.
+        const dx = o.x - cx, dy = o.y - cy, d2 = dx * dx + dy * dy, reach = 1.1 + o.r;
+        let tvx = 0, tvy = 0;
+        if (m.seen && d2 < reach * reach && d2 > 1e-4) {
+          const d = Math.sqrt(d2), t = 1 - d / reach, f = t * t * (3 - 2 * t) * 1.1;
+          tvx = (dx / d) * f; tvy = (dy / d) * f;
         }
-        o.vx *= 1 - Math.min(1, dt * 1.6); o.vy *= 1 - Math.min(1, dt * 1.6);
+        const ease = Math.min(1, dt * 3.5);
+        o.vx += (tvx - o.vx) * ease; o.vy += (tvy - o.vy) * ease;
         o.x += (o.vx + Math.sin(performance.now() / 1700 + o.phase) * 0.12) * dt;
         o.y += (o.vy + o.rise) * dt;
         if (o.y - o.r > orbs.halfH + 0.5) respawn(o, false);
@@ -368,13 +432,6 @@
     if (items.length) gsap.from(items, { y: 22, opacity: 0, scale: 0.97, duration: 0.55, delay: 0.12, stagger: 0.055, ease: 'back.out(1.4)', clearProps: 'all' });
   }
 
-  /* ================================================================== vanilla-tilt on clickable cards */
-  function tilt(root) {
-    if (reduced || !window.VanillaTilt) return;
-    const els = root.querySelectorAll('.org-card, .event-card, .logo-tilt');
-    if (els.length) VanillaTilt.init(els, { max: 7, speed: 450, scale: 1.03, glare: true, 'max-glare': 0.35, gyroscope: false });
-  }
-
   /* ================================================================== newest chat messages pop in */
   const chatCounts = new Map();
   function chatPop(root, key) {
@@ -413,16 +470,19 @@
       lastKey = key;
       document.documentElement.dataset.view = me ? 'app' : 'login';
       orbs.uniforms.uMul.value = me ? 0.85 : 1; // in the app the 3D bubbles live behind the panels (see css: data-view="app")
-      tilt(root);
       if (fresh) enter(root); else chatPop(root, key);
     } catch (e) { warn('enhancements', e); }
     return out;
   };
 
+  fx.debug = { orbs, pointer, dodge, get bubbles() { return bubbles; } }; // read-only peek for tests and tuning
+
   /* ================================================================== boot */
   $('#fx-toggle-visual').addEventListener('click', () => fx.setVisual(!fx.visual));
   $('#fx-toggle-sound').addEventListener('click', () => fx.setSound(!fx.sound));
   buildHills();
+  buildFlowers();
   applySound();
   applyVisual();
+  if (!reduced) leanRaf = requestAnimationFrame(leanLoop);
 })();

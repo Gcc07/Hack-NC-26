@@ -74,7 +74,7 @@
         h('div', { class: 'logo-tilt' }, M.logo(220)),
         h('h1', { class: 'sr-only' }, 'Meadow'),
         h('p', { class: 'tagline' }, TAGLINE),
-        h('p', { class: 'lede' }, 'Discord for student org event planning. Share availability, get a concrete plan, commit to a role, and chat — all in one sunny little place.'),
+        h('p', { class: 'lede' }, 'Student org event planning made easy. Share availability, get a concrete plan, commit to a role, and chat — all in one sunny little place.'),
         h('ul', { class: 'bullets' },
           h('li', null, '📅 Free/busy sharing — never your event titles'),
           h('li', null, '🤖 Dewey suggests times; people decide'),
