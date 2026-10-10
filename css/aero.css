@@ -447,8 +447,7 @@ ul.plain { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 6
 #fx-meadow {
   inset: 0; z-index: 1; overflow: hidden;
   perspective: 920px; perspective-origin: 50% 58%;
-  transform: translateX(var(--meadow-shift, 0px));
-  will-change: transform;
+  transform: none;
 }
 .meadow-haze {
   position: absolute; left: 0; right: 0; bottom: 34vh; height: 18vh;
@@ -561,3 +560,115 @@ html[data-view="app"] .home-content { padding-left: 16px; }
 @media (max-width: 760px) {
   .meadow-field { height: 42vh; }
 }
+/* Meadow desktop refinement: bright Aero chrome, calm content, sculpted terrain. */
+:root { --glass: rgba(246,252,255,.92); --glass-strong: rgba(255,255,255,.97); --radius: 18px; }
+body { -webkit-text-stroke: 0; letter-spacing: .01em; }
+.aero-icon { display: inline-flex; flex: none; vertical-align: middle; filter: drop-shadow(0 2px 1px #23537228); }
+.aero-icon svg { width: 100%; height: 100%; overflow: visible; }
+.icon-label, .tab { display: inline-flex; align-items: center; gap: 7px; }
+#fx-orbs { z-index: 2; opacity: .6; }
+#fx-bubbles, #fx-orbs { mask-image: linear-gradient(90deg, #000, transparent 20%, transparent 80%, #000); }
+#fx-meadow { inset: 0 -24px; perspective: none; }
+.meadow-field { display: none; }
+.meadow-haze { bottom: 28vh; height: 24vh; background: radial-gradient(ellipse at center, #e7f6ce65, transparent 70%); }
+#fx-hills { height: 53vh; min-height: 270px; overflow: visible; }
+#fx-flowers { height: 14vh; }
+.wave-bg { width: 13vw; opacity: .32; }
+.login { max-width: 1280px; margin: auto; grid-template-columns: minmax(0,1fr) minmax(310px,390px); gap: clamp(28px,5vw,76px); padding: 48px clamp(28px,6vw,80px) 120px; align-content: center; }
+.hero-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 25px; }
+.hero-brand .wordmark { font-size: clamp(38px, 4.8vw, 52px); }
+.hero-brand .logo-img { border-radius: 15px; border-width: 2px; margin: 0; }
+.desktop-label { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #154661; margin-bottom: 15px; }
+.login-hero .hero-heading { font-family: 'Trebuchet MS', var(--font); font-size: clamp(36px,4.2vw,59px); font-weight: 700; letter-spacing: -.055em; line-height: 1.04; color: #123d59; text-shadow: 0 2px 0 #ffffffa6; margin-bottom: 18px; }
+.login-hero .tagline { display: block; background: none; border: 0; border-radius: 0; padding: 0; font-size: 14px; color: #245374; margin-bottom: 12px; max-width: 370px; }
+.login-hero .lede { background: none; padding: 0; font-size: 18px; max-width: 400px; line-height: 1.5; margin-bottom: 24px; text-shadow: 0 1px #ffffff85; }
+.bullets { gap: 9px; }
+.bullets li { display: flex; align-items: center; gap: 12px; border-radius: 13px; width: 100%; max-width: 375px; padding: 10px 13px; background: linear-gradient(#ffffffeb,#eaf8ffd9); font-size: 14px; }
+.bullets small { display: block; font-size: 12px; font-weight: 400; color: #375871; margin-top: 1px; }
+.login-card { padding: 0 25px 23px; gap: 12px; border: 1px solid #f8ffff; border-radius: 19px; background: linear-gradient(145deg,#fffffffa,#e8f7fff5); }
+.login-chrome { display: flex; align-items: center; gap: 8px; margin: 0 -25px 9px; padding: 11px 17px; border-radius: 18px 18px 0 0; border-bottom: 1px solid #84bad4; background: linear-gradient(120deg,#ffffff90,transparent 45%),linear-gradient(#d4f1ff,#88c6e9); font-size: 12px; color: #204e70; text-shadow: 0 1px white; }
+.login-card h2 { font: 700 28px 'Trebuchet MS',sans-serif; letter-spacing: -.04em; }
+.login-card label { font-size: 13px; }
+.login-card input { min-height: 43px; }
+.login-card .hint { line-height: 1.5; }
+.login-card .btn.lg { white-space: normal; min-height: 46px; font-size: 15px; }
+.login-card .profiles { max-height: 150px; overflow-y: auto; }
+.btn { min-height: 35px; }
+.card, .event-card, .org-card, .role { border-radius: 14px; border: 1px solid #aecddd; box-shadow: 0 3px 0 #c3dbe77a,0 6px 15px #17456b0d,inset 0 1px #fff; }
+.card, .role { background: #fafdfff5; }
+.event-card { position: relative; background: linear-gradient(135deg,#fffef4,#f6fbef); padding-top: 21px; }
+.event-card::before { content: ''; position: absolute; top: 7px; left: calc(50% - 4px); width: 8px; height: 8px; border-radius: 50%; background: radial-gradient(circle at 30% 25%,white,#79b2c7 45%,#347493); box-shadow: 0 2px 2px #234b6d55; }
+.org-head { background: linear-gradient(120deg,#ffffffa6,transparent 50%),linear-gradient(#cae9f9,#e7f4fb); }
+.buddy-head, .modal-title { border-bottom: 1px solid #8cb9cf; }
+.titlebar { border-radius: 15px; }
+.tab { padding: 9px 12px; font-size: 14px; }
+.garden-progress { display: flex; align-items: center; gap: 9px; padding: 9px 0 3px; }
+.garden-progress .meter { margin: 0 0 5px; }
+.garden-progress small { color: #365d3f; }
+.bloom-toast { display: flex; align-items: center; gap: 12px; background: #f5ffeef5; border-color: #a4c88c; }
+.bloom-toast .icon-flower { animation: claim-bloom .65s cubic-bezier(.2,.8,.3,1.4) both; transform-origin: bottom; }
+@keyframes claim-bloom { from { transform: scale(.25) rotate(-18deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+.empty .aero-icon { margin-bottom: 10px; }
+.rail-btn.active, .dot.online { animation: none; }
+.desk { padding: 14px 18px 44px; }
+.two-col { grid-template-columns: repeat(auto-fit,minmax(min(100%,340px),1fr)); }
+@media (max-width: 1000px) and (min-width: 761px) {
+  .login { grid-template-columns: minmax(0,1fr) minmax(300px,350px); gap: 28px; padding: 32px 30px 100px; }
+  .login-hero .hero-heading { font-size: 42px; }
+}
+@media (max-width: 760px) {
+  .login { display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; gap: 25px; padding: 28px 20px 115px; }
+  .login-hero { text-align: left; max-width: 440px; width: 100%; margin: auto; }
+  .hero-brand { margin-bottom: 18px; }
+  .hero-brand .logo-img { width: 72px; height: 72px; }
+  .hero-brand .wordmark { font-size: clamp(27px, 7.8vw, 38px); }
+  .login-hero .hero-heading { font-size: clamp(34px,8vw,46px); }
+  .desktop-label { font-size: 10px; }
+  .login-hero .lede { font-size: 16px; margin-bottom: 16px; }
+  .bullets { gap: 6px; }
+  .bullets li { max-width: none; padding: 8px 12px; }
+  .login-card { width: 100%; max-width: 440px; margin: 0 auto; }
+  #fx-hills { height: 42vh; }
+  .desk { padding: 8px 8px 80px; }
+  .titlebar { flex-wrap: wrap; gap: 7px; }
+  .titlebar .tagline-sm { display: none; }
+  .titlebar .btn { font-size: 12px; }
+  .tabs { flex-wrap: nowrap; overflow-x: auto; }
+  .tab { white-space: nowrap; flex: none; padding: 10px; }
+  .row.between { flex-wrap: wrap; }
+  .footer { display: none; }
+  #fx-controls { bottom: 12px; }
+  .connection-status { max-width: calc(100vw - 100px); font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #fx-meadow { transform: none; }
+  .bloom-toast .icon-flower { animation: none; }
+}
+.fx-off #fx-meadow { transform: none; }
+
+/* Tiny foreground daisies: stems, leaves and petals, rather than flat blocks. */
+.bloom, .bloom.b1, .bloom.b2 { width: 18px; height: 29px; background: linear-gradient(#59923b,#36642d) 8px 10px / 2px 19px no-repeat; }
+.bloom::before { content: ''; position: absolute; left: 5px; top: 3px; width: 7px; height: 7px; border-radius: 50%; background: #f3d76b; box-shadow: 0 -4px 0 0 #fffce5,4px -1px 0 0 #fffce5,3px 4px 0 0 #fffce5,-3px 4px 0 0 #fffce5,-4px -1px 0 0 #fffce5; }
+.bloom::after { content: ''; position: absolute; left: 9px; top: 17px; width: 8px; height: 4px; background: #75a54a; border-radius: 0 100% 0 100%; transform: rotate(-30deg); }
+/* Keep the top of the welcome screen reachable on short laptop windows. */
+@media (min-width: 761px) { .login { align-content: safe center; } }
+
+/* Stationary landscape beneath a higher cloud bank and a smaller Aero sun. */
+#fx-sky {
+  bottom: auto;
+  height: 52vh;
+  min-height: 200px;
+  mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
+}
+#fx-sun { top: -11vmin; left: -11vmin; width: 46vmin; height: 46vmin; }
+
+/* A quiet ornamental pond, embedded in the foreground hill. */
+.pond-koi { animation: koi-glide 9s ease-in-out infinite alternate; }
+.koi-two { animation-duration: 12s; animation-delay: -4s; }
+.koi-three { animation-duration: 10s; animation-delay: -6s; }
+.pond-ripple { opacity: .28; animation: pond-shimmer 6s ease-in-out infinite alternate; }
+@keyframes koi-glide { from { transform: translateX(-9px) rotate(-3deg); } to { transform: translateX(12px) rotate(4deg); } }
+@keyframes pond-shimmer { from { opacity: .12; } to { opacity: .4; } }
+.fx-off .pond-koi, .fx-off .pond-ripple { animation: none; }
+@media (prefers-reduced-motion: reduce) { .pond-koi, .pond-ripple { animation: none; } }

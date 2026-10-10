@@ -71,23 +71,26 @@
       h(
         'div',
         { class: 'login-hero' },
-        h('div', { class: 'logo-tilt' }, M.logo(220)),
-        h('h1', { class: 'sr-only' }, 'Meadow'),
+        h('div', { class: 'hero-brand' }, M.logo(96), h('span', { class: 'wordmark' }, 'Meadow')),
+        h('div', { class: 'desktop-label' }, M.icon('leaf', 18), 'A little space to come together'),
+        h('h1', { class: 'hero-heading' }, 'Good things grow', h('br'), 'with good company.'),
         h('p', { class: 'tagline' }, TAGLINE),
-        h('p', { class: 'lede' }, 'Student org event planning made easy. Share availability, get a concrete plan, commit to a role, and chat — all in one sunny little place.'),
+        h('p', { class: 'lede' }, 'Find your people. Make a plan. Bring it to life. Your student org’s sunny little corner of the internet.'),
         h('ul', { class: 'bullets' },
-          h('li', null, '📅 Free/busy sharing — never your event titles'),
-          h('li', null, '🤖 Dewey suggests times; people decide'),
-          h('li', null, '🙋 Roles that actually get claimed'))
+          h('li', null, M.icon('calendar'), h('span', null, 'Find a time', h('small', null, 'Share availability. Keep the details private.'))),
+          h('li', null, M.icon('drop'), h('span', null, 'A little help from Dewey', h('small', null, 'Your planning buddy. You make the call.'))),
+          h('li', null, M.icon('flower'), h('span', null, 'Watch your plans bloom', h('small', null, 'Real people. Real roles. Things get done.'))))
       ),
       h(
         'div',
         { class: 'login-card glass' },
-        h('h2', null, 'Sign in'),
+        h('div', { class: 'login-chrome' }, M.icon('folder', 20), 'meadow / welcome'),
+        h('h2', null, 'Come on in.'),
+        h('p', { class: 'hint' }, 'Your people are just a little closer.'),
         pending ? h('p', { class: 'notice' }, `You've been invited to an org (code ${pending}). Sign in to join!`) : null,
         M.google.configured()
           ? googleSlot
-          : h('p', { class: 'hint' }, 'Google sign-in is available once you add a Google OAuth client ID in ', h('code', null, 'js/config.js'), '. For now, create a demo profile on this server:'),
+          : h('p', { class: 'hint' }, 'Choose a name to explore this local demo.'),
         h('form', { class: 'stack', onSubmit: signIn },
           h('label', { for: 'login-name' }, 'Name'), nameIn,
           h('label', { for: 'login-email' }, 'School email'), emailIn,
@@ -110,8 +113,8 @@
             location.hash = '#/o/' + orgId + '/chat';
             M.afterLogin();
           },
-        }, '✨ Launch the demo org'),
-        h('p', { class: 'hint' }, 'Creates “Sunrise Service Society” with 8 members, calendars, an event that needs people, and chat.')
+        }, M.icon('leaf'), 'Launch the demo org'),
+        h('p', { class: 'hint' }, 'Take a look around Sunrise Service Society. Eight friendly faces, shared calendars, and plans in the making.')
       )
     );
   };
@@ -137,7 +140,7 @@
     return h(
       'nav',
       { class: 'rail glass', 'aria-label': 'Your organizations' },
-      h('a', { class: 'rail-btn' + (route.name === 'home' ? ' active' : ''), href: '#/', title: 'Home', 'aria-label': 'Home' }, '🏠'),
+      h('a', { class: 'rail-btn' + (route.name === 'home' ? ' active' : ''), href: '#/', title: 'Home', 'aria-label': 'Home' }, M.icon('folder', 30)),
       orgs.map((o) =>
         h('a', { class: 'rail-btn' + (active && active.id === o.id ? ' active' : ''), href: '#/o/' + o.id + '/chat', title: o.name, 'aria-label': o.name }, o.emoji)
       ),
@@ -269,7 +272,7 @@
     return h(
       'aside',
       { class: 'buddies glass', 'aria-label': 'Buddy list' },
-      h('div', { class: 'buddy-head' }, h('strong', null, '💬 Buddy List'), h('span', { class: 'hint' }, 'who’s around')),
+      h('div', { class: 'buddy-head' }, h('strong', { class: 'icon-label' }, M.icon('people', 22), 'Buddy List'), h('span', { class: 'hint' }, 'who’s around')),
       h('div', { class: 'my-status' },
         h('div', { class: 'row tight' }, M.avatar(me, 28), h('strong', null, M.firstName(me.name)), presence),
         statusMsg,
@@ -288,7 +291,7 @@
   V.orgWindow = function (org) {
     const me = M.me();
     const r = M.ui.route;
-    const tabs = [['chat', '💬', 'Chat'], ['events', '📅', 'Events'], ['schedule', '🗓️', 'Schedule'], ['board', '📌', 'Board'], ['members', '👥', 'Members']];
+    const tabs = [['chat', 'chat', 'Chat'], ['events', 'calendar', 'Events'], ['schedule', 'calendar', 'Schedule'], ['board', 'folder', 'Board'], ['members', 'people', 'Members']];
     const state = S();
     const openFlares = Object.values(state.flares).filter((f) => f.status === 'open' && state.events[f.eventId] && state.events[f.eventId].orgId === org.id).length;
     const tab = tabs.find((t) => t[0] === r.tab) ? r.tab : 'chat';
@@ -307,7 +310,7 @@
         h('div', { class: 'tabs', role: 'tablist' },
           tabs.map(([k, icon, label]) =>
             h('a', { class: 'tab' + (tab === k ? ' active' : ''), role: 'tab', 'aria-selected': tab === k ? 'true' : 'false', href: '#/o/' + org.id + '/' + k },
-              icon + ' ' + label, k === 'board' && openFlares ? h('span', { class: 'badge' }, openFlares) : null)))),
+              M.icon(icon, 21), label, k === 'board' && openFlares ? h('span', { class: 'badge' }, openFlares) : null)))),
       h('div', { class: 'org-body ' + tab }, body)
     );
   };
