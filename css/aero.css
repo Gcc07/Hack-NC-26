@@ -2,6 +2,9 @@
    Glossy tactile buttons, glass panels, sky + grass, buddy-list presence dots.
    Text is always dark navy on near-white glass for strong contrast. */
 
+/* Brand fonts (see Assets/fonts) */
+@font-face { font-family: "Aerobics"; src: url("../Assets/fonts/AerobicsRegular-mLRZP.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "Myriad"; src: url("../Assets/fonts/MYRIADAT.TTF") format("truetype"); font-weight: 400; font-display: swap; } /* single weight: browser synthesizes bold */
 :root {
   --ink: #0b2a4a;
   --ink-soft: #35536f;
@@ -19,7 +22,7 @@
   --glass-strong: rgba(255, 255, 255, 0.9);
   --radius: 16px;
   --shadow: 0 8px 24px rgba(11, 70, 130, 0.25), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
-  --font: "Frutiger", "Segoe UI", "Trebuchet MS", Tahoma, Verdana, sans-serif;
+  --font: "Myriad", "Frutiger", "Segoe UI", "Trebuchet MS", Tahoma, Verdana, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -27,12 +30,14 @@ html, body { height: 100%; margin: 0; }
 body {
   font-family: var(--font);
   color: var(--ink);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.45;
-  background: linear-gradient(180deg, #2c9bea 0%, #6cc6fb 28%, #bfeaff 58%, #e9fbff 74%, #c8f4b4 100%) fixed;
+  -webkit-text-stroke: 0.25px currentColor; /* Myriad file is very light; thicken slightly for contrast */
+  background: linear-gradient(180deg, #2c9bea 0%, #6cc6fb 45%, #bfeaff 100%) fixed;
   overflow: hidden;
 }
 h1, h2, h3 { margin: 0 0 8px; line-height: 1.2; }
+h1 { font-family: "Aerobics", var(--font); font-weight: 400; letter-spacing: .01em; }
 h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 p { margin: 0 0 8px; }
 a { color: #0a5bb5; }
@@ -47,34 +52,6 @@ q { quotes: "“" "”"; }
 
 :focus-visible { outline: 3px solid #ff9f1a; outline-offset: 2px; }
 
-/* ---------- sky backdrop ---------- */
-.sky { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
-.sky .cloud { position: absolute; background: #fff; border-radius: 999px; filter: blur(2px); opacity: 0.85; }
-.sky .cloud::before, .sky .cloud::after { content: ""; position: absolute; background: #fff; border-radius: 50%; }
-.sky .c1 { width: 220px; height: 54px; top: 9%; left: 8%; animation: drift 60s linear infinite alternate; }
-.sky .c1::before { width: 90px; height: 90px; left: 28px; top: -42px; }
-.sky .c1::after { width: 70px; height: 70px; left: 110px; top: -30px; }
-.sky .c2 { width: 280px; height: 66px; top: 18%; right: 6%; animation: drift 80s linear infinite alternate-reverse; }
-.sky .c2::before { width: 110px; height: 110px; left: 40px; top: -52px; }
-.sky .c2::after { width: 90px; height: 90px; left: 150px; top: -38px; }
-.sky .bubble { position: absolute; bottom: -80px; border-radius: 50%; background: radial-gradient(circle at 30% 25%, rgba(255,255,255,.95), rgba(255,255,255,.25) 40%, rgba(160,225,255,.25)); border: 1px solid rgba(255,255,255,.8); animation: rise linear infinite; }
-.sky .b1 { left: 12%; width: 46px; height: 46px; animation-duration: 22s; }
-.sky .b2 { left: 34%; width: 24px; height: 24px; animation-duration: 16s; animation-delay: -6s; }
-.sky .b3 { left: 63%; width: 62px; height: 62px; animation-duration: 28s; animation-delay: -12s; }
-.sky .b4 { left: 82%; width: 32px; height: 32px; animation-duration: 19s; animation-delay: -3s; }
-.sky .hills { position: absolute; left: -10%; right: -10%; bottom: -80px; height: 240px; background:
-  radial-gradient(ellipse at 28% 100%, var(--grass-1) 0 40%, transparent 41%),
-  radial-gradient(ellipse at 74% 100%, #55bd3a 0 38%, transparent 39%),
-  radial-gradient(ellipse at 50% 100%, var(--grass-2) 0 44%, transparent 45%); opacity: 0.9; }
-/* wildflowers dotted across the meadow, echoing the logo art */
-.sky .flowers { position: absolute; left: 0; right: 0; bottom: 0; height: 90px;
-  background:
-    radial-gradient(circle at 50% 50%, #ffe14a 0 3px, #f0a800 3.5px 4.5px, transparent 5px) 0 0 / 61px 37px,
-    radial-gradient(circle at 50% 50%, #ffd21f 0 2.5px, #d98f00 3px 4px, transparent 4.5px) 23px 17px / 47px 29px,
-    radial-gradient(circle at 50% 50%, #fff 0 2px, transparent 2.5px) 11px 8px / 83px 41px;
-  -webkit-mask-image: linear-gradient(180deg, transparent, #000 60%); mask-image: linear-gradient(180deg, transparent, #000 60%); }
-@keyframes drift { from { transform: translateX(-30px); } to { transform: translateX(60px); } }
-@keyframes rise { from { transform: translateY(0); opacity: 0; } 10% { opacity: 1; } to { transform: translateY(-110vh); opacity: 0.2; } }
 
 /* ---------- glass ---------- */
 .glass {
@@ -164,16 +141,16 @@ button.chip:hover { background: #d4eaff; }
 .avatars { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; margin: 4px 0; }
 .avatars .avatar { margin-right: -4px; }
 .dewey { display: inline-block; flex: none; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(10, 80, 140, .45);
-  background: url("../Meadow2.png") 62% 82% / 260% no-repeat, #bfe6ff; }
+  background: url("../Assets/Meadow2.png") 62% 82% / 260% no-repeat, #bfe6ff; }
 
 /* ---------- shell ---------- */
 .desk { height: 100vh; display: flex; flex-direction: column; gap: 10px; padding: 10px 14px 4px; }
 .titlebar { display: flex; align-items: center; gap: 12px; padding: 6px 14px; border-radius: 999px; flex: none; }
 .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; color: inherit; }
-.wordmark { font-size: 26px; font-weight: 800; letter-spacing: -0.01em; color: #08407f; text-shadow: 0 1px 0 #fff, 0 0 8px rgba(255,255,255,.9); }
+.wordmark { font-family: "Aerobics", var(--font); font-size: 26px; white-space: nowrap; font-weight: 400; letter-spacing: .02em; color: #08407f; text-shadow: 0 1px 0 #fff, 0 0 8px rgba(255,255,255,.9); }
 .logo-img { display: block; flex: none; border-radius: 18%; border: 2px solid #fff; box-shadow: 0 3px 10px rgba(11,70,130,.45), 0 0 0 1px rgba(11,70,130,.25); object-fit: cover; }
 .login-hero .logo-img { border-radius: 24px; border-width: 4px; margin-bottom: 8px; max-width: 100%; height: auto; }
-.tagline-sm { color: var(--ink-soft); font-size: 13px; font-weight: 600; }
+.tagline-sm { color: var(--ink-soft); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 68px minmax(0, 1fr) 270px; gap: 12px; }
 .window { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .footer { text-align: center; font-size: 12px; color: var(--ink); padding: 2px; text-shadow: 0 1px 0 rgba(255,255,255,.7); flex: none; }
@@ -399,7 +376,6 @@ ul.plain { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 6
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
-  .sky .bubble { display: none; }
 }
 @media (prefers-contrast: more) {
   .hint { color: #1a3550; }

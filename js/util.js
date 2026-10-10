@@ -173,7 +173,7 @@
   M.logo = (size) => {
     const img = document.createElement('img');
     img.className = 'logo-img';
-    img.src = 'Meadow1.png';
+    img.src = 'Assets/Meadow1.png';
     img.alt = 'Meadow';
     img.width = img.height = size || 40;
     return img;

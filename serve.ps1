@@ -24,6 +24,7 @@ try {
       $ext = [System.IO.Path]::GetExtension($file).ToLower()
       $ctx.Response.ContentType = $(if ($mime.ContainsKey($ext)) { $mime[$ext] } else { 'application/octet-stream' })
       $bytes = [System.IO.File]::ReadAllBytes($file)
+      $ctx.Response.Headers.Add('Cache-Control', 'no-store')  # always show your latest edits
       $ctx.Response.ContentLength64 = $bytes.Length
       $ctx.Response.OutputStream.Write($bytes, 0, $bytes.Length)
     } else {
