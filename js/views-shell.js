@@ -47,7 +47,7 @@
         pending ? h('p', { class: 'notice' }, `You've been invited to an org (code ${pending}). Sign in to join!`) : null,
         M.google.configured()
           ? googleSlot
-          : h('p', { class: 'hint' }, 'Google sign-in is available once you add a Google OAuth client ID in ', h('code', null, 'js/config.js'), '. For now, create a local profile:'),
+          : h('p', { class: 'hint' }, 'Google sign-in is available once you add a Google OAuth client ID in ', h('code', null, 'js/config.js'), '. For now, create a demo profile on this server:'),
         h('form', { class: 'stack', onSubmit: signIn },
           h('label', { for: 'login-name' }, 'Name'), nameIn,
           h('label', { for: 'login-email' }, 'School email'), emailIn,

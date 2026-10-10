@@ -111,14 +111,14 @@ Calendar service    Scheduling engine   AI assistant
 ```
 
 ### Proposed stack
-- **Backend:** Flask (Python)
-- **Database:** PostgreSQL via Supabase
+- **Backend:** Flask (Python); the initial API is in `backend/`
+- **Storage:** in-memory for now; Tiger Data integration is planned for a later step
 - **Realtime chat and presence:** Redis Pub/Sub with WebSockets
 - **Calendar:** Google Calendar API + an ICS parser
 - **AI:** an LLM API for parsing, drafting, and summarizing
 - **Frontend:** HTML/CSS/JS with a Frutiger Aero design system
 
-*This is a proposal; swap anything.*
+*Beyond the initial Flask API, this is a proposal.*
 
 ### Draft data model
 - `users`, `friendships`
@@ -168,15 +168,52 @@ The aesthetic carries real function:
 
 ## Getting Started
 
-The web app is static HTML/CSS/JS with no install step. Data lives in the browser's `localStorage`, so several tabs act like several people on one server.
+### Run the app
 
-```powershell
-./serve.ps1          # serves http://localhost:8080 (or just open index.html)
+Flask serves the frontend and stores shared app data in memory. Start everything
+from the repository root:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+python app.py
 ```
+
+Open **http://127.0.0.1:5000**. Run tests with `python -m pytest -q`.
+Data resets when the process restarts. The API is currently for local development,
+without authentication. See [backend/README.md](backend/README.md) for endpoints,
+examples, and the storage interface for a future Tiger Data adapter.
+
+### Browser demo
+
+The HTML/CSS/JS frontend loads and saves through Flask's `/api/state` endpoint.
+Tabs connected to the same server share data, with updates polled every 1.5 seconds.
+The status indicator shows saving, connection failures, and retry controls. If
+another tab saves first, the stale edit is rejected and you are asked to repeat
+it. Use `python app.py`; opening `index.html` or the old static server alone will
+not provide the API.
 
 Click **Launch the demo org**, then use the buddy list's "Demo: be someone else" to open other members in new tabs. Optional Google sign-in / calendar import: set `GOOGLE_CLIENT_ID` in `js/config.js`. Optional LLM upgrade for Dewey: add a key under Me → Assistant (stored only in your browser).
 
 Never commit API keys or client secrets.
+
+### Git hygiene (including Windows)
+
+Git uses **`.gitignore` on every operating system**, including Windows. The plain
+`gitignore` file is a reference copy only; Git does not read it. Keep the copies
+in sync when changing ignore rules. In Windows Explorer, enable **View → Show →
+File name extensions** so an editor does not accidentally save `.gitignore.txt`.
+
+Local environment files, credentials, virtual environments, databases, logs, and
+editor caches are ignored. `.env.example`, `.env.sample`, and `.env.template` are
+allowed for placeholder values only. Keep secrets out of frontend JavaScript:
+anything served to a browser is public.
+
+Before committing, review `git status --short` and `git diff --cached`.
+Ignore rules do not protect files already tracked by Git or detect secrets pasted
+into source files. If a credential was committed, revoke it; adding an ignore
+rule afterward does not remove it from history.
 
 ---
 

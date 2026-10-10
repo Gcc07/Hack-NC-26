@@ -19,7 +19,12 @@
         if (k === 'class') el.className = v;
         else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
         else if (k.length > 2 && k.startsWith('on') && typeof v === 'function')
-          el.addEventListener(k.slice(2).toLowerCase(), v);
+          el.addEventListener(k.slice(2).toLowerCase(), (event) => {
+            try {
+              const result = v(event);
+              if (result && typeof result.catch === 'function') result.catch(e => M.toast(e.message));
+            } catch (e) { M.toast(e.message); }
+          });
         else if (k === 'value') value = v;
         else if (k === 'checked' || k === 'disabled' || k === 'selected') el[k] = !!v;
         else if (v === true) el.setAttribute(k, '');

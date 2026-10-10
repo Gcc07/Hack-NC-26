@@ -381,3 +381,6 @@ ul.plain { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 6
   .hint { color: #1a3550; }
   .glass, .card { background: #fff; }
 }
+/* Shared backend connection and save state. */
+.connection-status { position: fixed; bottom: 8px; right: 12px; z-index: 1000; padding: 5px 10px; border-radius: 12px; background: #eef9ed; color: #234c34; font: 12px system-ui, sans-serif; box-shadow: 0 1px 5px #0002; }
+.connection-status.error { background: #fff0de; color: #713a08; }

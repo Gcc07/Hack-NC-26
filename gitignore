@@ -1,0 +1,75 @@
+# Git reads this file on Windows, macOS, and Linux.
+# The plain "gitignore" file is a reference copy, not an active Git config.
+
+# Python environments and generated files (all platforms)
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.egg-info/
+build/
+dist/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+.flaskenv
+.flaskenv.*
+!.flaskenv.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+service_account*.json
+*-firebase-adminsdk-*.json
+secrets/
+.secrets/
+
+# Local runtime data, databases, and logs
+instance/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.log
+logs/
+*.pid
+
+# Frontend dependencies and browser-test output
+node_modules/
+playwright-report/
+test-results/
+
+# Developer editor settings and temporary files
+.idea/
+.vscode/
+.vs/
+*.suo
+*.user
+*.swp
+*.swo
+*~
+
+# Windows and macOS metadata
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+._*

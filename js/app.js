@@ -160,6 +160,9 @@
 
   /* ------------------------------------------------------------------ shell */
   function buildApp() {
+    if (!M.store.ready()) return h('div', { class: 'login' },
+      h('div', { class: 'login-card glass' }, h('h1', null, 'Connecting to Meadow…'),
+        h('p', null, 'Your shared data will appear when Flask is connected.')));
     const me = M.me();
     if (!me) return M.views.login();
     const r = M.ui.route;
@@ -271,6 +274,7 @@
   /* ------------------------------------------------------------------ boot */
   function onRoute() {
     parseHash();
+    if (!M.store.ready()) { M.render(); return; }
     if (handleSpecialRoutes()) return;
     M.render();
   }
@@ -281,10 +285,12 @@
     M.render();
   });
 
-  document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('DOMContentLoaded', async () => {
+    M.render();
+    await M.store.init();
     onRoute();
-    M.act.heartbeat();
-    setInterval(M.act.heartbeat, 20000);
+    if (M.store.ready()) M.safe(M.act.heartbeat);
+    setInterval(() => { if (M.store.ready()) M.safe(M.act.heartbeat); }, 20000);
     setInterval(() => {
       if (!document.hidden) M.render();
     }, 45000);
