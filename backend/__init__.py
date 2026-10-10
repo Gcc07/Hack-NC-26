@@ -36,10 +36,14 @@ def create_app(config=None, *, repository: Repository | None = None):
             raise ValueError("STORAGE_BACKEND must be memory or tiger.")
     app.extensions["repository"] = repository
     app.register_blueprint(api)
-    from .insights import insights_api
-    from .tiger_cli import register_commands
-    app.register_blueprint(insights_api)
-    register_commands(app)
+    try:
+        from .insights import insights_api
+        from .tiger_cli import register_commands
+        app.register_blueprint(insights_api)
+        register_commands(app)
+    except ImportError:
+        # Tiger insights/CLI modules are optional until that work lands.
+        pass
 
     # Connection errors never echo a database URL or password into a response.
     import psycopg
