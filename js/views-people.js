@@ -176,11 +176,6 @@
     const people = Object.values(state.users).filter((u) => u.id !== me.id && !u.placeholder);
     const friends = M.friendsOf(me.id).map((id) => state.users[id]);
 
-    const cfg = M.AI.llmConfig();
-    const key = h('input', { type: 'password', value: cfg.key || '', placeholder: 'sk-… (stays in this browser)', autocomplete: 'off', 'aria-label': 'API key' });
-    const base = h('input', { value: cfg.base || '', placeholder: 'https://api.openai.com/v1' });
-    const model = h('input', { value: cfg.model || '', placeholder: 'gpt-4o-mini' });
-
     return h('div', { class: 'main-scroll pad two-col', 'data-scroll': 'main' },
       h('div', null,
         h('section', { class: 'card' },
@@ -227,11 +222,9 @@
           : null,
         h('section', { class: 'card' },
           h('h2', null, '🤖 Assistant'),
-          h('p', { class: 'hint' }, 'Dewey works offline with a built-in parser. Optionally add an OpenAI-compatible API key to let an LLM refine requests and polish summaries. The key is stored only in this browser and only free/busy-derived text is sent.'),
-          h('label', null, 'API key', key), h('label', null, 'Base URL (optional)', base), h('label', null, 'Model (optional)', model),
-          h('div', { class: 'row' },
-            h('button', { class: 'btn', onClick: () => { localStorage.setItem('meadow:llm', JSON.stringify({ key: key.value.trim(), base: base.value.trim(), model: model.value.trim() })); M.toast(key.value ? 'LLM enabled' : 'LLM disabled'); M.render(); } }, 'Save'),
-            cfg.key ? h('button', { class: 'btn small', onClick: () => { localStorage.removeItem('meadow:llm'); M.render(); } }, 'Remove key') : null)),
+          M.AI.llmEnabled()
+            ? h('p', null, h('span', { class: 'chip free' }, 'Gemini on'), ' Dewey uses Gemini to refine requests and polish summaries. Only free/busy-derived text is sent.')
+            : h('p', { class: 'hint' }, 'Dewey works offline with a built-in parser. To upgrade it with Gemini, set GEMINI_API_KEY in the server’s .env and restart.')),
         h('section', { class: 'card' },
           h('h2', null, '⚠️ Danger zone'),
           h('div', { class: 'row wrap' },

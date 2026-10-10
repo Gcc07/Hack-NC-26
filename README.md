@@ -120,7 +120,7 @@ Calendar service    Scheduling engine   AI assistant
 - **Storage:** in-memory by default. The Tiger Data adapter (Tiger Cloud, PostgreSQL with TimescaleDB) is the durable store and analytics layer, behind the same storage interface. In-memory storage stays available for local development without an account.
 - **Realtime chat and presence:** Redis Pub/Sub with WebSockets (live fan-out only; Tiger holds the history)
 - **Calendar:** Google Calendar API + an ICS parser
-- **AI:** an LLM API for parsing, drafting, and summarizing
+- **AI:** Google Gemini (`gemini-2.5-flash` for parsing and summarizing, `gemini-embedding-001` for semantic search), called from Flask
 - **Frontend:** HTML/CSS/JS with a Frutiger Aero design system
 
 *Beyond the initial Flask API and the storage interface, this is a proposal.*
@@ -263,7 +263,7 @@ flask --app app tiger-init
 The app then stores shared Meadow data in Tiger and the Board tab reads activity from the
 hypertables. Guestbook notes, event descriptions, officer handoffs, and Dewey summaries are
 searchable there. Keyword search works immediately. Semantic search is optional: set
-`MEADOW_EMBEDDING_URL` and `MEADOW_EMBEDDING_MODEL`, then run `flask --app app tiger-index-memory`.
+`GEMINI_API_KEY`, then run `flask --app app tiger-index-memory`.
 Leave `STORAGE_BACKEND=memory` to run with no database. Cloud forks are not wired up.
 
 ### Browser demo
@@ -275,7 +275,7 @@ another tab saves first, the stale edit is rejected and you are asked to repeat
 it. Use `python app.py`; opening `index.html` or the old static server alone will
 not provide the API.
 
-Click **Launch the demo org**, then use the buddy list's "Demo: be someone else" to open other members in new tabs. Optional Google sign-in / calendar import: set `GOOGLE_CLIENT_ID` in `js/config.js`. Optional LLM upgrade for Dewey: add a key under Me → Assistant (stored only in your browser).
+Click **Launch the demo org**, then use the buddy list's "Demo: be someone else" to open other members in new tabs. Optional Google sign-in / calendar import: set `GOOGLE_CLIENT_ID` in `js/config.js`. Optional Gemini upgrade for Dewey: set `GEMINI_API_KEY` in `.env` and restart (the key stays on the server).
 
 Never commit API keys, database credentials, or client secrets.
 
