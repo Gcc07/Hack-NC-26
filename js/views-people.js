@@ -45,7 +45,7 @@
       h('section', { class: 'card' },
         h('h2', null, '🔗 Invite people'),
         h('div', { class: 'row wrap' }, h('code', { class: 'invite' }, link), h('button', { class: 'btn small', onClick: () => M.copyText(link) }, 'Copy link')),
-        h('p', { class: 'hint' }, 'Invite code: ', h('strong', null, org.inviteCode), '. Links work for anyone using this same browser profile; a hosted backend is needed to invite people on other devices.')),
+        h('p', { class: 'hint' }, 'Invite code: ', h('strong', null, org.inviteCode), '. Links work for anyone connected to this Meadow server.')),
       h('section', { class: 'card' },
         h('h2', null, `👥 Members (${members.length})`),
         h('div', { class: 'member-list' },
@@ -111,6 +111,7 @@
 
     return h('div', { class: 'main-scroll pad two-col', 'data-scroll': 'main' },
       h('div', null,
+        V.insightsPanel(org),
         h('section', { class: 'card' },
           h('h2', null, '🔥 Open flares'),
           open.length ? open.map(flareCard) : h('p', { class: 'hint' }, 'No open flares. When someone drops a role, it shows up here so anyone can claim it.'),
@@ -235,6 +236,6 @@
           h('h2', null, '⚠️ Danger zone'),
           h('div', { class: 'row wrap' },
             h('button', { class: 'btn danger small', onClick: () => M.confirm('Delete your account and all your data from Meadow?', () => { M.act.deleteAccount(me.id); location.hash = '#/'; M.render(); }) }, 'Delete my account'),
-            h('button', { class: 'btn small', onClick: () => M.confirm('Wipe ALL Meadow data in this browser (every profile, org and message)?', () => { M.store.reset(); M.session.set(null); location.hash = '#/'; M.render(); }) }, 'Reset everything')))));
+            h('button', { class: 'btn small', onClick: () => M.confirm('Wipe ALL shared Meadow data on this server (every profile, org and message, for everyone)?', () => { M.store.reset(); M.session.set(null); location.hash = '#/'; M.render(); }) }, 'Reset shared data')))));
   };
 })();
