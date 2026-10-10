@@ -384,3 +384,10 @@ ul.plain { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 6
 /* Shared backend connection and save state. */
 .connection-status { position: fixed; bottom: 8px; right: 12px; z-index: 1000; padding: 5px 10px; border-radius: 12px; background: #eef9ed; color: #234c34; font: 12px system-ui, sans-serif; box-shadow: 0 1px 5px #0002; }
 .connection-status.error { background: #fff0de; color: #713a08; }
+
+/* Organization pulse: narrow bars preserve room for board content. */
+.pulse-chart { display: flex; align-items: end; gap: 3px; height: 90px; margin: 12px 0; border-bottom: 1px solid #aab7bd; }
+.pulse-column { height: 100%; flex: 1; display: flex; align-items: end; min-width: 0; }
+.pulse-column i { display: block; width: 100%; background: #4c9470; border-radius: 3px 3px 0 0; }
+.memory-result { margin: 12px 0; overflow-wrap: anywhere; }
+.memory-result p { margin: 4px 0; }

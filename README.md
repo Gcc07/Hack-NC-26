@@ -59,12 +59,14 @@ One place where an org can:
 - **Slot suggestions** for officer meetings and events, ranked by who can attend
 - **In-app group chat** per org and per event
 - **AI scheduling assistant** that proposes times and drafts nudges (see below)
+- **Tiger Data storage layer** for availability, chat history, and org memory (see [Where Tiger Data Fits](#where-tiger-data-fits))
 
 ### Stretch
 - **Flares:** backfill dropped roles by claim
 - **Messaging bridge:** reach members through GroupMe or SMS (see Integration Notes)
 - **Buddy list presence** and away messages
 - **Event guestbook** with an AI-generated officer handoff summary
+- **Officer handoff search:** ask the org's history a question and get ranked answers
 - **Attendance check-in** by join code or QR, feeding participation stats
 - **Roster import** from a sign-up form export, with duplicate merging
 
@@ -100,34 +102,96 @@ The scheduling core is **deterministic**. AI sits on top of it.
 Clients (web app, bridged messaging)
         |
    API server  ----  Realtime layer (chat, presence)
-        |
-   +----+-----------------+-----------------+
-   |                      |                 |
+        |                    |
+   +----+-----------------+  |  (fan-out only; durable
+   |                      |  |   history is written to Tiger)
 Calendar service    Scheduling engine   AI assistant
 (Google, ICS)       (constraints,       (parsing, drafting,
                      role coverage)      summarizing)
-        |
-     Database
+        |                  |                 |
+        +------------------+-----------------+
+                           |
+                  Tiger Data (PostgreSQL)
+          hypertables | continuous aggregates | hybrid search
 ```
 
 ### Proposed stack
 - **Backend:** Flask (Python); the initial API is in `backend/`
-- **Storage:** in-memory for now; Tiger Data integration is planned for a later step
-- **Realtime chat and presence:** Redis Pub/Sub with WebSockets
+- **Storage:** in-memory today; **Tiger Data (Tiger Cloud, PostgreSQL)** is the durable store and analytics layer, added behind the existing storage interface. The in-memory adapter stays as an offline fallback for local development.
+- **Realtime chat and presence:** Redis Pub/Sub with WebSockets (live fan-out only; Tiger holds the history)
 - **Calendar:** Google Calendar API + an ICS parser
 - **AI:** an LLM API for parsing, drafting, and summarizing
 - **Frontend:** HTML/CSS/JS with a Frutiger Aero design system
 
-*Beyond the initial Flask API, this is a proposal.*
+*Beyond the initial Flask API and the storage interface, this is a proposal.*
 
 ### Draft data model
 - `users`, `friendships`
 - `orgs`, `org_members` (with org role)
-- `calendars`, `busy_blocks`
+- `calendars`, **`busy_slots`** *(hypertable)*
 - `events`, `event_roles`, `role_claims`
-- `messages` (with `channel` and `source`: app or bridged)
+- **`messages`** *(hypertable; has `channel` and `source`: app or bridged)*
+- **`presence_events`** *(hypertable)*
+- **`checkins`** *(hypertable)*
 - `suggestions` (proposed slots with scores and reasoning)
-- `guestbook_entries`
+- **`guestbook_entries`** *(text + embedding columns for hybrid search)*
+
+---
+
+## Where Tiger Data Fits
+
+Meadow's data is mostly **timestamped and append-heavy**: busy blocks, chat, presence, check-ins. That is the shape Tiger Data (TimescaleDB on PostgreSQL) is built for. We use it in three places, where it does real work rather than acting as a generic store.
+
+### 1. Availability as time-bucketed data (scheduling engine)
+
+On import, every calendar is normalized into **30-minute busy slots** stored in the `busy_slots` hypertable (`user_id`, `slot_start`). Slot ranking then becomes a time-bucket query:
+
+- "How many members are free at each slot this week?" is a `time_bucket` range query joined to `org_members`, which feeds the availability heatmap and the ranked suggestions.
+- Role coverage ("are two people free for the Thursday tabling shift?") is a count over the same slots.
+- Only free/busy is stored. Titles, locations, and attendees never reach the database (see Privacy).
+
+### 2. Chat and activity as an event stream
+
+- `messages`, `presence_events`, and `checkins` are hypertables, partitioned by time.
+- Older chunks are **compressed**, so a semester of chat stays cheap to keep around.
+- A **continuous aggregate** over `presence_events` and `messages` maintains each org's activity by hour of week. The scheduler reads it as a **preferred-hours signal**, so observed behavior improves future proposals.
+- Check-ins roll up into per-member participation stats for officers.
+
+### 3. Hybrid search for the officer handoff
+
+"Knowledge disappears every spring" is the problem this solves. Guestbook entries, event notes, and chat summaries are indexed for **keyword (BM25) search plus vector (pgvector) similarity**, in the same database. An incoming officer can ask "who did we use for food last fall, and what went wrong?" and get ranked answers. Because it is all one Postgres, results join directly against `events` and `role_claims`, with no separate vector store to run.
+
+### Optional: forks for demos and what-if checks
+
+Tiger Cloud's zero-copy forks let us reset or branch the demo org instantly before presenting, and let the assistant test a proposed schedule on a fork before anything touches real data. That fits the principle that the system proposes and humans commit.
+
+### Schema sketch
+
+```sql
+-- Calendars are normalized to 30-minute busy slots on import
+CREATE TABLE busy_slots (
+  user_id     UUID        NOT NULL,
+  slot_start  TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (user_id, slot_start)
+);
+SELECT create_hypertable('busy_slots', by_range('slot_start'));
+
+-- Chat history (app + bridged messages)
+CREATE TABLE messages (
+  id          UUID        NOT NULL,
+  org_id      UUID        NOT NULL,
+  channel     TEXT        NOT NULL,
+  source      TEXT        NOT NULL,   -- 'app' | 'groupme' | 'sms'
+  body        TEXT        NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (id, created_at)
+);
+SELECT create_hypertable('messages', by_range('created_at'));
+```
+
+### Storage interface
+
+All persistence goes through the storage interface described in [backend/README.md](backend/README.md). The in-memory adapter and the Tiger adapter implement the same interface, so the app runs with or without a database.
 
 ---
 
@@ -159,8 +223,8 @@ The aesthetic carries real function:
 
 ## Privacy
 
-- Calendar data is converted to free/busy blocks on import
-- Orgs see availability, never titles, locations, or attendees of private events
+- Calendar data is converted to free/busy slots on import; titles, locations, and attendees are never stored
+- Orgs see availability, never details of private events
 - Users can disconnect a calendar and delete imported data at any time
 - Messaging bridges are opt-in per user
 
@@ -170,7 +234,7 @@ The aesthetic carries real function:
 
 ### Run the app
 
-Flask serves the frontend and stores shared app data in memory. Start everything
+Flask serves the frontend and stores shared app data in memory by default. Start everything
 from the repository root:
 
 ```sh
@@ -181,9 +245,19 @@ python app.py
 ```
 
 Open **http://127.0.0.1:5000**. Run tests with `python -m pytest -q`.
-Data resets when the process restarts. The API is currently for local development,
+With the default in-memory storage, data resets when the process restarts. The API is currently for local development,
 without authentication. See [backend/README.md](backend/README.md) for endpoints,
-examples, and the storage interface for a future Tiger Data adapter.
+examples, and the storage interface used by the Tiger Data adapter.
+
+### Using Tiger Data (planned)
+
+To run against Tiger Cloud, create a service, copy its PostgreSQL connection string into a local
+`.env` (never commit it), and select the Tiger adapter. `.env.example` will carry placeholder values only:
+
+```sh
+DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<db>?sslmode=require
+STORAGE_BACKEND=tiger   # default: memory
+```
 
 ### Browser demo
 
@@ -196,7 +270,7 @@ not provide the API.
 
 Click **Launch the demo org**, then use the buddy list's "Demo: be someone else" to open other members in new tabs. Optional Google sign-in / calendar import: set `GOOGLE_CLIENT_ID` in `js/config.js`. Optional LLM upgrade for Dewey: add a key under Me → Assistant (stored only in your browser).
 
-Never commit API keys or client secrets.
+Never commit API keys, database credentials, or client secrets.
 
 ### Git hygiene (including Windows)
 
@@ -221,9 +295,12 @@ rule afterward does not remove it from history.
 
 - [ ] Auth and calendar import (Google + ICS)
 - [ ] Orgs, officer/member permissions, and event roles
+- [ ] Tiger Data adapter behind the storage interface (hypertables for busy slots, messages, presence)
 - [ ] Scheduling engine with ranked suggestions and role coverage
+- [ ] Continuous aggregate for org activity (preferred-hours signal)
 - [ ] Group chat with presence
 - [ ] AI assistant for parsing and nudges
+- [ ] Hybrid search over guestbook and event notes (officer handoff)
 - [ ] Messaging bridge (GroupMe or SMS)
 - [ ] Flares, buddy list, guestbook, and officer handoff
 
@@ -234,7 +311,7 @@ rule afterward does not remove it from history.
 - What is the best demo moment? (e.g. a tabler cancels, the assistant finds a replacement, and a member claims the shift live)
 - Which org type do we design around first: a club with weekly meetings, a Greek or service org, or a project team?
 - Which bridge do we build: GroupMe or SMS?
-- What is the project name?
+- Which Tiger features make the cut for the demo: hybrid search, activity aggregates, or forks?
 
 ---
 

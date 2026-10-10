@@ -441,7 +441,7 @@
         let out = '**Summary** — ' + sum.headline;
         if (sum.decisions.length) out += '\n\n**Decisions & commitments**\n' + sum.decisions.map((d) => '• ' + d).join('\n');
         if (sum.questions.length) out += '\n\n**Still open**\n' + sum.questions.map((d) => '• ' + d).join('\n');
-        say(await M.AI.polish(out, 'Rewrite this chat summary clearly, keep every bullet. Do not invent facts.'));
+        say(await M.AI.polish(out, 'Rewrite this chat summary clearly, keep every bullet. Do not invent facts.'), { type: 'summary' });
         return;
       }
       if (/handoff|hand-off|hand off/.test(lc)) {

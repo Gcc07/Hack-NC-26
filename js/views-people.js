@@ -111,6 +111,7 @@
 
     return h('div', { class: 'main-scroll pad two-col', 'data-scroll': 'main' },
       h('div', null,
+        V.insightsPanel(org),
         h('section', { class: 'card' },
           h('h2', null, '🔥 Open flares'),
           open.length ? open.map(flareCard) : h('p', { class: 'hint' }, 'No open flares. When someone drops a role, it shows up here so anyone can claim it.'),
