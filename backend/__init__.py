@@ -19,7 +19,7 @@ def create_app(config=None, *, repository: Repository | None = None):
     app = Flask(__name__, static_folder=None)
     app.config.from_mapping(MAX_CONTENT_LENGTH=1_000_000,
                             STORAGE_BACKEND=os.getenv("STORAGE_BACKEND", "memory"),
-                            DATABASE_URL=os.getenv("DATABASE_URL", ""))
+                            DATABASE_URL=os.getenv("TIMESCALE_SERVICE_URL", ""))
     if config:
         app.config.update(config)
     # Unit tests remain isolated even if a developer has a real service in .env.
@@ -31,7 +31,7 @@ def create_app(config=None, *, repository: Repository | None = None):
             repository = InMemoryRepository()
         elif backend == "tiger":
             if not app.config["DATABASE_URL"]:
-                raise ValueError("Tiger storage requires DATABASE_URL in your local .env.")
+                raise ValueError("Tiger storage requires TIMESCALE_SERVICE_URL in your local .env.")
             from .tiger_repository import TigerRepository
             repository = TigerRepository(app.config["DATABASE_URL"])
         else:

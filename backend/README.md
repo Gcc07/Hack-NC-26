@@ -142,7 +142,7 @@ browser sessions, reload persistence, and recovery after a failed save.
 ## Tiger Data
 
 The default `STORAGE_BACKEND=memory` needs no database. To use Tiger Cloud, copy
-`.env.example` to `.env`, set `STORAGE_BACKEND=tiger` and `DATABASE_URL`, then run:
+`.env.example` to `.env`, set `STORAGE_BACKEND=tiger` and `TIMESCALE_SERVICE_URL`, then run:
 
 ```sh
 flask --app app tiger-init

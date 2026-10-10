@@ -120,7 +120,7 @@ Calendar service    Scheduling engine   AI assistant
 - **Storage:** in-memory by default. The Tiger Data adapter (Tiger Cloud, PostgreSQL with TimescaleDB) is the durable store and analytics layer, behind the same storage interface. In-memory storage stays available for local development without an account.
 - **Realtime chat and presence:** Redis Pub/Sub with WebSockets (live fan-out only; Tiger holds the history)
 - **Calendar:** Google Calendar API + an ICS parser
-- **AI:** Google Gemini (`gemini-2.5-flash` for parsing and summarizing, `gemini-embedding-001` for semantic search), called from Flask
+- **AI:** Google Gemini (`gemini-flash-latest` for parsing and summarizing, `gemini-embedding-001` for semantic search), called from Flask
 - **Frontend:** HTML/CSS/JS with a Frutiger Aero design system
 
 *Beyond the initial Flask API and the storage interface, this is a proposal.*
@@ -276,7 +276,7 @@ Create a Tiger Cloud service with PostgreSQL 17+ and TimescaleDB enabled. Copy `
 
 ```sh
 STORAGE_BACKEND=tiger
-DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<db>?sslmode=require
+TIMESCALE_SERVICE_URL=postgres://tsdbadmin:<password>@<host>:<port>/tsdb?sslmode=require
 flask --app app tiger-init
 ```
 

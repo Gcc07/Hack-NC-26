@@ -118,13 +118,13 @@ def test_tiger_setup_commands_wait_for_configuration():
         result = runner.invoke(args=command)
         assert result.exit_code != 0
         assert "STORAGE_BACKEND=tiger" in result.output
-    with pytest.raises(ValueError, match="DATABASE_URL"):
+    with pytest.raises(ValueError, match="TIMESCALE_SERVICE_URL"):
         create_app({"STORAGE_BACKEND": "tiger", "DATABASE_URL": ""})
 
 
 def test_unit_tests_do_not_open_a_developer_tiger_database(monkeypatch):
     monkeypatch.setenv("STORAGE_BACKEND", "tiger")
-    monkeypatch.setenv("DATABASE_URL", "postgresql://user:secret@example.test/meadow")
+    monkeypatch.setenv("TIMESCALE_SERVICE_URL", "postgresql://user:secret@example.test/meadow")
     client = create_app({"TESTING": True}).test_client()
     assert client.post("/api/users", json={"name": "Maya"}).status_code == 201
 

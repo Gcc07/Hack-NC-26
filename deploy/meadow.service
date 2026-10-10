@@ -20,7 +20,7 @@ After=network.target
 [Service]
 User=ubuntu
 WorkingDirectory=/home/ubuntu/Hack-NC-26
-# .env (STORAGE_BACKEND, DATABASE_URL, ...) is loaded by the app from the repo root.
+# .env (STORAGE_BACKEND, TIMESCALE_SERVICE_URL, GEMINI_API_KEY, ...) is loaded by the app from the repo root.
 ExecStart=/home/ubuntu/Hack-NC-26/.venv/bin/gunicorn \
     --workers 1 --threads 4 \
     --bind 127.0.0.1:5000 \

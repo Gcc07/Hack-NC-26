@@ -13,7 +13,7 @@ from flask import Blueprint, jsonify, request
 from .models import ValidationError
 
 API = 'https://generativelanguage.googleapis.com/v1beta/models/'
-CHAT_MODEL = 'gemini-2.5-flash'
+CHAT_MODEL = 'gemini-flash-latest'
 EMBEDDING_MODEL = 'gemini-embedding-001'
 EMBEDDING_DIMS = 768
 

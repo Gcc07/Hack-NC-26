@@ -26,7 +26,7 @@ def _repository():
     from flask import current_app
     repo = current_app.extensions["repository"]
     if not hasattr(repo, "initialize"):
-        raise click.ClickException("Set STORAGE_BACKEND=tiger and DATABASE_URL in .env, then run this again.")
+        raise click.ClickException("Set STORAGE_BACKEND=tiger and TIMESCALE_SERVICE_URL in .env, then run this again.")
     return repo
 
 

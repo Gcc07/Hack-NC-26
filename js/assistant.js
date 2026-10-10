@@ -430,19 +430,27 @@
 
   /* ---------------------------------------------------------------- optional Gemini upgrade */
   // The Gemini key lives in the server's .env (GEMINI_API_KEY); the browser never sees it.
+  // The check runs while heavy page scripts are still loading, so retry a few times on failure.
   let llmOn = false;
   M.AI.llmEnabled = () => llmOn;
-  M.AI.checkLLM = () =>
-    fetch('/api/ai/status', { cache: 'no-store', signal: AbortSignal.timeout(5000) })
-      .then((r) => (r.ok ? r.json() : {}))
-      .then((d) => {
-        if (llmOn !== !!d.enabled) {
-          llmOn = !!d.enabled;
-          M.render && M.render();
+  M.AI.checkLLM = async (tries = 4) => {
+    for (let i = 0; i < tries; i++) {
+      try {
+        const r = await fetch('/api/ai/status', { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+        if (!r.ok) throw new Error('status ' + r.status);
+        const on = !!(await r.json()).enabled;
+        if (llmOn !== on) {
+          llmOn = on;
+          if (M.render) M.render();
         }
-      })
-      .catch(() => {});
-  M.AI.checkLLM();
+        return llmOn;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 1500 * (i + 1)));
+      }
+    }
+    return llmOn;
+  };
+  const llmReady = M.AI.checkLLM();
 
   async function ai(path, body) {
     const res = await fetch('/api/ai/' + path, {
@@ -458,7 +466,7 @@
   /** parseRequest with an optional Gemini pass layered on top of the rule-based result. */
   M.AI.parseRequestSmart = async function (text, ctx) {
     const base = M.AI.parseRequest(text, ctx);
-    if (!M.AI.llmEnabled()) return base;
+    if (!(await llmReady) && !M.AI.llmEnabled()) return base;
     try {
       const j = (await ai('parse', { text })).result || {};
       const c = base.constraints;
@@ -483,7 +491,7 @@
   };
 
   M.AI.polish = async function (text, instruction) {
-    if (!M.AI.llmEnabled()) return text;
+    if (!(await llmReady) && !M.AI.llmEnabled()) return text;
     try {
       return (await ai('polish', { text, instruction })).text || text;
     } catch {

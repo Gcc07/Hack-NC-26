@@ -44,7 +44,7 @@ def busy_slots(user, now, extra=()):
 
 class TigerRepository:
     def __init__(self, database_url, *, connect_timeout=5):
-        if not database_url: raise TigerUnavailable("TIGER_DATABASE_URL is required.")
+        if not database_url: raise TigerUnavailable("TIMESCALE_SERVICE_URL is required.")
         self._database_url, self._connect_timeout = database_url, connect_timeout
 
     @contextmanager
