@@ -13,6 +13,13 @@ def test_frontend_assets_are_served_without_exposing_source():
     assert client.get("/api").json["name"] == "Meadow API"
 
 
+def test_privacy_policy_is_public():
+    client = create_app({"TESTING": True}).test_client()
+    response = client.get("/privacy")
+    assert response.status_code == 200
+    assert b"Privacy Policy" in response.data
+
+
 def test_browser_snapshot_and_crud_share_one_repository():
     app = create_app({"TESTING": True})
     one, two = signed_in(app), signed_in(app)

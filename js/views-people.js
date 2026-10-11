@@ -252,7 +252,8 @@
       return h('div', { class: 'track-row' }, h('span', null, M.fmt.day(day)), h('div', { class: 'track' }, segs));
     };
 
-    const icsFile = h('input', { type: 'file', accept: '.ics,text/calendar', 'aria-label': 'Upload .ics calendar', onChange: async () => {
+    // The native file picker stays hidden; a regular button opens it.
+    const icsFile = h('input', { type: 'file', accept: '.ics,text/calendar', class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true', onChange: async () => {
       const f = icsFile.files[0];
       if (!f) return;
       try {
@@ -260,8 +261,11 @@
         M.toast(`Imported ${res.events} events → ${res.blocks.length} busy blocks. Titles were discarded.`);
       } catch (e) {
         M.toast(e.message);
+      } finally {
+        icsFile.value = ''; // picking the same file again still fires change
       }
     } });
+    const icsButton = h('button', { type: 'button', class: 'btn small', onClick: () => icsFile.click() }, '📁 Upload .ics file');
 
     const friendIn = h('input', { list: 'people', placeholder: 'Name or email of someone on Meadow', 'data-keep': 'friend-in', 'aria-label': 'Add a friend' });
     const people = Object.values(state.users).filter((u) => u.id !== me.id && !u.placeholder);
@@ -277,7 +281,10 @@
             ? h('p', null, h('span', { class: 'chip free' }, 'Connected'), ` ${me.calendar.name} · ${me.calendar.count} items · updated ${M.fmt.ago(me.calendar.importedAt)}`)
             : h('p', { class: 'notice' }, 'No calendar yet — Dewey can’t include you in suggestions until you share availability.'),
           h('p', { class: 'hint' }, 'Upload an .ics file (Google, Apple, Outlook, or your school’s class schedule export). Meadow keeps only busy time ranges; titles, locations and attendees are thrown away at import. All-day and “free” events are ignored.'),
-          h('div', { class: 'row wrap' }, icsFile,
+          isMe && M.auth.account.googleCalendar && !M.auth.account.googleCalendarList
+            ? h('p', { class: 'notice' }, 'Only your primary Google calendar is included. Click “Update Google permissions” and allow Meadow to see your calendar list to include your other calendars too.')
+            : null,
+          h('div', { class: 'row wrap' }, icsFile, icsButton,
             h('button', { class: 'btn small', onClick: () => M.safe(() => { M.act.importICS(me.id, SAMPLE_ICS(), 'sample-schedule.ics'); M.toast('Sample class schedule imported'); }) }, 'Use a sample schedule')),
           h('div', { class: 'row wrap' },
             !isMe
@@ -291,6 +298,10 @@
               : M.google.configured()
               ? h('button', { class: 'btn', onClick: M.google.link }, 'Connect Google Calendar (free/busy only)')
               : h('button', { class: 'btn', disabled: true, title: 'Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the server .env' }, 'Connect Google Calendar'),
+            // Re-runs Google's consent screen so a skipped or revoked calendar permission can be granted again.
+            isMe && M.google.configured() && (M.auth.account.google || M.auth.account.googleCalendar)
+              ? h('button', { class: 'btn small', title: 'Review what Meadow can access in your Google account', onClick: M.google.link }, '🔑 Update Google permissions')
+              : null,
             me.calendar ? h('button', { class: 'btn danger small', onClick: () => M.confirm('Remove your calendar and all imported busy blocks?' + (isMe && M.auth.account.googleCalendar ? ' Meadow’s Google Calendar access is revoked too.' : ''), async () => {
               M.act.removeCalendar(me.id);
               if (isMe && M.auth.account.googleCalendar) { await M.auth.disconnectCalendar().catch(() => {}); await M.auth.check(); M.render(); }

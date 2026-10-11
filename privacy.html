@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meadow — Privacy Policy</title>
+  <meta name="description" content="How Meadow collects, uses, and protects your information.">
+  <meta name="theme-color" content="#2c9bea">
+  <link rel="icon" type="image/png" href="Assets/Meadow1.png">
+  <style>
+    :root { color-scheme: light dark; --bg: #eef6fd; --card: #fff; --ink: #1b2a38; --muted: #50606f; --accent: #1f7fc4; --line: #cfe2f2; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0f1a24; --card: #172532; --ink: #e5eef6; --muted: #9fb2c3; --accent: #6cb8f0; --line: #26394a; }
+    }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+    article { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px clamp(16px, 4vw, 40px); }
+    h1 { margin: 0 0 4px; font-size: 1.9rem; }
+    h2 { margin: 2rem 0 .5rem; font-size: 1.2rem; }
+    .meta { color: var(--muted); margin: 0 0 1.5rem; }
+    a { color: var(--accent); }
+    li { margin: .25rem 0; }
+    .back { display: inline-block; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+<main>
+  <a class="back" href="/">&larr; Back to Meadow</a>
+  <article>
+    <h1>Privacy Policy</h1>
+    <p class="meta">Effective October 11, 2026</p>
+
+    <p><strong>Important: Meadow is a student hackathon project, not a commercial product.</strong> It was built in a short time for demonstration and educational purposes by a small team of students. It has not been professionally audited, it may contain bugs or security flaws, and it may be changed, reset, or shut down at any time without notice. By using Meadow, you agree to this Privacy Policy, including the disclaimers and limits of liability below. If you do not agree, do not use Meadow.</p>
+
+    <h2>Do not share sensitive information</h2>
+    <p>Because Meadow is a demo, <strong>you should not enter or share any sensitive information</strong>. That includes, for example: government ID numbers (such as Social Security numbers), financial or payment information, passwords you use on other sites, health or medical information, precise home addresses, private information about other people, or anything you would not be comfortable becoming public. Use a password that is unique to Meadow. If you choose to share sensitive information anyway, you do so entirely at your own risk.</p>
+
+    <p>This policy explains what information Meadow collects, how it is used, and who it is shared with. Questions can be sent as described under <a href="#contact">Contact</a>.</p>
+
+    <h2>Information we collect</h2>
+    <ul>
+      <li><strong>Account information.</strong> If you create a password account, we store your username and a one-way (scrypt) hash of your password. We never store your password itself.</li>
+      <li><strong>Google sign-in.</strong> If you sign in with Google, we receive your name, email address, and profile photo from Google.</li>
+      <li><strong>Google Calendar availability (optional).</strong> If you choose to connect Google Calendar, Meadow requests read-only access to your free/busy times and the list of your calendar IDs. Meadow does <em>not</em> read event titles, descriptions, attendees, locations, or calendar names. To keep your availability current, we store a Google refresh token, which is encrypted before it is saved.</li>
+      <li><strong>Content you add.</strong> Organizations, events, role sign-ups, RSVPs, votes, feedback, availability, and messages you post in Meadow.</li>
+      <li><strong>Phone number and iMessage (optional).</strong> If you opt in to the iMessage bridge, we store your phone number and your opt-in choice, along with RSVPs and replies you send through it.</li>
+      <li><strong>Session data.</strong> When you sign in, we set a session cookie. Only a hashed copy of the session token is stored on our server.</li>
+    </ul>
+
+    <h2>How we use information</h2>
+    <ul>
+      <li>To sign you in and keep your account secure.</li>
+      <li>To show your availability to your organization and suggest meeting and event times.</li>
+      <li>To run group features such as role sign-ups, RSVPs, and chat, including the optional iMessage bridge.</li>
+      <li>To power optional AI features (for example, suggested times, summaries, and interpreting iMessage replies).</li>
+    </ul>
+    <p>We do not sell your information, and we do not use it for advertising.</p>
+
+    <h2>Google user data</h2>
+    <p>Meadow's use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements. Calendar free/busy data is used only to show your availability and schedule events within Meadow. It is not transferred to others except as needed to provide those features, is not used for advertising, and is not used to train AI models. You can revoke Meadow's access at any time from your <a href="https://myaccount.google.com/permissions">Google Account permissions</a>.</p>
+
+    <h2>Who we share information with</h2>
+    <ul>
+      <li><strong>Members of your organizations</strong> can see your profile name, photo, availability (as busy/free, not event details), and the content you post there.</li>
+      <li><strong>Service providers</strong> that run parts of Meadow on our behalf:
+        <ul>
+          <li>Google, for sign-in and Calendar access;</li>
+          <li>Google Gemini, which processes the text sent to Meadow's AI features;</li>
+          <li>Tiger Data (Timescale), which hosts Meadow's database;</li>
+          <li>Photon (Spectrum), which relays messages for the optional iMessage bridge.</li>
+        </ul>
+      </li>
+      <li><strong>Legal reasons</strong>, if required by law.</li>
+    </ul>
+
+    <h2>Cookies and local storage</h2>
+    <p>Meadow uses one essential cookie to keep you signed in. It is HttpOnly and expires 3 hours after you sign in. Meadow also stores a few display preferences (such as visual effects) in your browser's local storage. We do not use advertising or third-party tracking cookies.</p>
+
+    <h2>Security</h2>
+    <p>We take reasonable steps for a student project: passwords are hashed, session tokens are stored only as hashes, Google refresh tokens are encrypted at rest, and requests that change data are checked to come from Meadow itself. However, <strong>no method of transmission or storage is completely secure, and we cannot and do not guarantee the security of any information</strong>. Any information you provide is transmitted and stored at your own risk.</p>
+
+    <h2>Retention and deletion</h2>
+    <p>We keep your information while your account exists, or until the project is shut down or its data is reset. You can delete your account from within Meadow at any time. Deleting your account removes your account record and sessions and revokes Meadow's Google access. Content you posted to a shared organization, and copies kept in backups or logs, may not be removed immediately. Because Meadow is a demo, data may also be lost or deleted at any time; do not rely on Meadow to store anything you need.</p>
+
+    <h2>Disclaimer of warranties</h2>
+    <p>MEADOW IS PROVIDED "AS IS" AND "AS AVAILABLE," WITHOUT WARRANTIES OF ANY KIND, WHETHER EXPRESS, IMPLIED, OR STATUTORY, INCLUDING ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, NON-INFRINGEMENT, ACCURACY, AVAILABILITY, OR SECURITY. We do not warrant that Meadow will be uninterrupted, error-free, or free of harmful components, or that any information (including AI-generated suggestions, schedules, or availability) will be accurate or reliable. You use Meadow at your own risk.</p>
+
+    <h2>Limitation of liability</h2>
+    <p>TO THE FULLEST EXTENT PERMITTED BY LAW, MEADOW'S CREATORS, CONTRIBUTORS, AND ANY HACKATHON ORGANIZERS OR SPONSORS SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF DATA, PRIVACY, PROFITS, GOODWILL, OR OTHER LOSSES, ARISING OUT OF OR RELATED TO YOUR USE OF (OR INABILITY TO USE) MEADOW, ANY UNAUTHORIZED ACCESS TO OR DISCLOSURE OF YOUR INFORMATION, OR THE ACTS OF ANY THIRD-PARTY SERVICE OR OTHER USER, WHETHER BASED ON WARRANTY, CONTRACT, TORT (INCLUDING NEGLIGENCE), OR ANY OTHER LEGAL THEORY, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. IN ANY CASE, OUR TOTAL LIABILITY SHALL NOT EXCEED ZERO U.S. DOLLARS ($0), OR THE MINIMUM AMOUNT PERMITTED BY LAW. Some jurisdictions do not allow certain exclusions or limits, so some of the above may not apply to you.</p>
+
+    <h2>Your responsibilities</h2>
+    <p>You are responsible for the information you choose to share, for keeping your login secure, and for making sure you have the right to share any information about other people. You agree to indemnify and hold harmless Meadow's creators and contributors from any claims, damages, or expenses arising from your use of Meadow, the content you submit, or your violation of this policy or of anyone else's rights.</p>
+
+    <h2>Third-party services</h2>
+    <p>Meadow relies on third-party services (listed above) that have their own terms and privacy policies. We are not responsible for the practices, availability, or security of those services.</p>
+
+    <h2>Children</h2>
+    <p>Meadow is intended for college students and is not directed to children under 13. We do not knowingly collect information from children under 13.</p>
+
+    <h2>Changes to this policy</h2>
+    <p>We may change this policy at any time by updating this page and the effective date above. Your continued use of Meadow after a change means you accept the updated policy.</p>
+
+    <h2 id="contact">Contact</h2>
+    <p>Questions or requests about your data can be sent by opening an issue on the <a href="https://github.com/Gcc07/Hack-NC-26">Meadow GitHub repository</a>.</p>
+  </article>
+</main>
+</body>
+</html>

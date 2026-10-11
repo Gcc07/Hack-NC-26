@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException
 
 from .api import api
-from .auth import Throttle, auth_api, guard_api
+from .auth import Throttle, auth_api, canonical_host, guard_api
 from .auth_store import InMemoryAuthStore
 from .models import ValidationError
 from .repository import RESOURCES, InMemoryRepository, MissingRecord, Repository, VersionConflict
@@ -67,6 +67,7 @@ def create_app(config=None, *, repository: Repository | None = None):
     else:
         app.extensions["auth_store"] = InMemoryAuthStore()
     app.extensions["auth_throttle"] = Throttle()
+    app.before_request(canonical_host)
     app.before_request(guard_api)
     app.register_blueprint(auth_api)
     # Register /api/ai and /api/insights before the catch-all /api/<resource> routes.
@@ -100,6 +101,10 @@ def create_app(config=None, *, repository: Repository | None = None):
     @app.get("/")
     def index():
         return send_from_directory(Path(app.root_path).parent, "index.html")
+
+    @app.get("/privacy")
+    def privacy():
+        return send_from_directory(Path(app.root_path).parent, "privacy.html")
 
     @app.get("/<any(js,css,Assets):folder>/<path:filename>")
     def frontend_asset(folder, filename):

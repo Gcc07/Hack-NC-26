@@ -216,6 +216,7 @@
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     reset() { this.update(s => { for (const [key, value] of Object.entries(empty())) s[key] = value; }); },
     retry() { error = ''; return dirty ? save() : refresh(); },
+    refresh: () => refresh(),
     async flush() {
       clearTimeout(timer);
       await save();

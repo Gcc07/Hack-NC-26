@@ -73,3 +73,6 @@ Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
 ._*
+
+# LLM project briefing (local only)
+project.md

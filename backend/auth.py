@@ -7,8 +7,9 @@ login.
 
 Google: OAuth 2.0 authorization code flow with PKCE, state and nonce, run on the
 server so the client secret and refresh token never reach the browser. The same
-consent screen asks for Google Calendar free/busy access. The refresh token is
-encrypted (Fernet) before it is stored.
+Calendar free/busy access is a separate,
+later request (incremental authorization), so Google always shows it on its own
+consent screen. The refresh token is encrypted (Fernet) before it is stored.
 """
 
 from __future__ import annotations
@@ -51,10 +52,19 @@ GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 GOOGLE_FREEBUSY_URL = "https://www.googleapis.com/calendar/v3/freeBusy"
+GOOGLE_CALENDAR_LIST_URL = "https://www.googleapis.com/calendar/v3/users/me/calendarList"
 GOOGLE_ISSUERS = {"https://accounts.google.com", "accounts.google.com"}
 CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.freebusy"
-GOOGLE_SCOPES = f"openid email profile {CALENDAR_SCOPE}"
+# Lets Meadow find the person's other calendars (school, work, shared). Only calendar ids are fetched.
+CALENDAR_LIST_SCOPE = "https://www.googleapis.com/auth/calendar.calendarlist.readonly"
+SIGN_IN_SCOPES = "openid email profile"
+# Asked for separately from sign-in so Google shows calendar access as its own step.
+CALENDAR_SCOPES = f"openid {CALENDAR_SCOPE} {CALENDAR_LIST_SCOPE}"
 FREEBUSY_DAYS = 60
+FREEBUSY_MAX_CALENDARS = 50  # Google's per-query limit
+# Generated calendars that are not the person's own commitments.
+SKIPPED_CALENDARS = ("#holiday@group.v.calendar.google.com", "#contacts@group.v.calendar.google.com",
+                     "#weeknum@group.v.calendar.google.com")
 
 # Comparing against a real hash keeps unknown-username logins as slow as wrong passwords.
 _DUMMY_HASH = generate_password_hash(secrets.token_urlsafe(16))
@@ -63,7 +73,19 @@ PUBLIC_PATHS = {"/api", "/api/health", "/api/ai/status", "/api/auth/config", "/a
 
 
 class GoogleError(RuntimeError):
-    pass
+    """str(error) is Google's short reason code; .message is its human-readable explanation."""
+
+    def __init__(self, reason, message=""):
+        super().__init__(reason)
+        self.message = message
+
+
+def _calendar_problem(error):
+    """(client error code, log line) for a failed free/busy import."""
+    reason = str(error)
+    if reason in ("accessNotConfigured", "SERVICE_DISABLED"):
+        return "google_calendar_api_disabled", f"Google Calendar API is disabled for this project: {error.message}"
+    return "google_calendar_failed", f"Google Calendar import failed ({reason}): {error.message}"
 
 
 class Throttle:
@@ -137,6 +159,35 @@ def current_session():
     if not token or len(token) > 128:
         return None
     return _store().session_account(_token_hash(token), now_utc())
+
+
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def _same_site(a, b):
+    """Hosts a browser keeps separate cookies for, yet a person treats as one site."""
+    a, b = a.lower(), b.lower()
+    return (a in LOCAL_HOSTS and b in LOCAL_HOSTS) or a.removeprefix("www.") == b.removeprefix("www.")
+
+
+def canonical_host():
+    """before_request: keep page loads on the host Google redirects back to.
+
+    Cookies are per host, so a session started on 127.0.0.1 is invisible to a Google
+    callback on localhost (and www.example.com vs example.com). Only aliases of the same
+    site are redirected, so a mistyped GOOGLE_REDIRECT_URI can never send users elsewhere.
+    """
+    configured = current_app.config.get("GOOGLE_REDIRECT_URI")
+    if not configured or request.method not in ("GET", "HEAD"):
+        return None
+    if request.path.startswith("/api") and request.path != "/api/auth/google/start":
+        return None
+    target, here = urlparse(configured), urlparse("//" + request.host)
+    if not target.hostname or target.netloc.lower() == request.host.lower():
+        return None
+    if target.port != here.port or not _same_site(target.hostname, here.hostname or ""):
+        return None
+    return redirect(f"{target.scheme}://{target.netloc}{request.full_path.rstrip('?')}", code=302)
 
 
 def guard_api():
@@ -230,6 +281,8 @@ def _me(account, expires_at):
         "provider": "password" if account["username"] else "google",
         "google": bool(account["google_sub"]),
         "googleCalendar": bool(account["google_refresh_token"]) and CALENDAR_SCOPE in (account["google_scope"] or "").split(),
+        # False for older grants: only the primary calendar is read until permissions are updated.
+        "googleCalendarList": CALENDAR_LIST_SCOPE in (account["google_scope"] or "").split(),
         "expiresAt": int(expires_at.timestamp() * 1000),
     }
 
@@ -387,7 +440,20 @@ def _decrypt(value):
 
 
 def _redirect_uri():
-    return current_app.config.get("GOOGLE_REDIRECT_URI") or url_for("auth.google_callback", _external=True)
+    """GOOGLE_REDIRECT_URI when it names this site, else the callback on the host the request came in on.
+
+    A .env copied from a laptop (localhost) onto the server would otherwise send every
+    production sign-in back to localhost. Behind nginx, MEADOW_BEHIND_PROXY=1 makes the
+    derived URL use the public https scheme and host.
+    """
+    configured = current_app.config.get("GOOGLE_REDIRECT_URI")
+    if configured:
+        target = urlparse(configured).hostname or ""
+        if _same_site(target, urlparse("//" + request.host).hostname or ""):
+            return configured
+        current_app.logger.warning("GOOGLE_REDIRECT_URI %s does not match host %s; using this host.",
+                                   configured, request.host)
+    return url_for("auth.google_callback", _external=True)
 
 
 def _http_json(url, *, form=None, body=None, token=None):
@@ -407,10 +473,17 @@ def _http_json(url, *, form=None, body=None, token=None):
             return json.loads(raw) if raw.strip() else {}
     except HTTPError as error:
         try:
-            detail = json.loads(error.read(10_000)).get("error", "")
+            body = json.loads(error.read(10_000))
         except ValueError:
-            detail = ""
-        raise GoogleError(detail if isinstance(detail, str) else f"HTTP {error.code}") from None
+            body = {}
+        detail = body.get("error", "") if isinstance(body, dict) else ""
+        if isinstance(detail, str) and detail:  # OAuth endpoints: {"error": "invalid_grant", ...}
+            raise GoogleError(detail, str(body.get("error_description", ""))) from None
+        if isinstance(detail, dict):  # Google APIs: {"error": {"message", "status", "errors": [{"reason"}]}}
+            reasons = [e.get("reason") for e in detail.get("errors") or [] if isinstance(e, dict)]
+            raise GoogleError(next(filter(None, reasons), None) or detail.get("status") or f"HTTP {error.code}",
+                              str(detail.get("message", ""))) from None
+        raise GoogleError(f"HTTP {error.code}") from None
     except (URLError, TimeoutError, ValueError, OSError):
         raise GoogleError("unreachable") from None
 
@@ -443,15 +516,59 @@ def verify_id_token(id_token, nonce):
     return claims
 
 
-def import_freebusy(user_id, access_token):
+def calendar_ids(access_token, scope):
+    """The primary calendar plus every other calendar shown in the person's Google Calendar.
+
+    Only ids are requested (the fields filter), so calendar names never reach Meadow.
+    """
+    ids = ["primary"]
+    if CALENDAR_LIST_SCOPE not in scope.split():
+        return ids
+    page = None
+    while len(ids) < FREEBUSY_MAX_CALENDARS:
+        query = {"minAccessRole": "freeBusyReader", "maxResults": 250,
+                 "fields": "items(id,primary,selected,hidden,deleted),nextPageToken"}
+        if page:
+            query["pageToken"] = page
+        result = _http_json(GOOGLE_CALENDAR_LIST_URL + "?" + urlencode(query), token=access_token)
+        for item in result.get("items") or []:
+            cid = item.get("id")
+            if (not isinstance(cid, str) or item.get("primary") or item.get("deleted") or item.get("hidden")
+                    or not item.get("selected") or cid.endswith(SKIPPED_CALENDARS) or cid in ids):
+                continue
+            ids.append(cid)
+        page = result.get("nextPageToken")
+        if not page:
+            break
+    return ids[:FREEBUSY_MAX_CALENDARS]
+
+
+def import_freebusy(user_id, access_token, scope=""):
     now = now_utc()
+    try:
+        ids = calendar_ids(access_token, scope)
+    except GoogleError as error:  # the list is a bonus; the primary calendar still works
+        current_app.logger.warning("Google calendar list failed (%s): %s", error, error.message)
+        ids = ["primary"]
     result = _http_json(GOOGLE_FREEBUSY_URL, token=access_token, body={
         "timeMin": now.isoformat().replace("+00:00", "Z"),
         "timeMax": (now + timedelta(days=FREEBUSY_DAYS)).isoformat().replace("+00:00", "Z"),
-        "items": [{"id": "primary"}],
+        "items": [{"id": cid} for cid in ids],
     })
+    calendars = result.get("calendars") or {}
+    primary = calendars.get("primary") or {}
+    if primary.get("errors"):  # e.g. notFound: Google answered, but not with this calendar's times
+        reason = (primary["errors"][0] or {}).get("reason") or "calendar_error"
+        raise GoogleError(reason, "Google could not read the primary calendar.")
+    blocks, used = [], 0
+    for cid in ids:
+        entry = calendars.get(cid) or {}
+        if entry.get("errors"):  # a shared calendar we may not read: skip it, keep the rest
+            continue
+        used += 1
+        blocks.extend(entry.get("busy") or [])
     busy = []
-    for block in ((result.get("calendars") or {}).get("primary") or {}).get("busy") or []:
+    for block in blocks:
         try:
             start = datetime.fromisoformat(block["start"].replace("Z", "+00:00"))
             end = datetime.fromisoformat(block["end"].replace("Z", "+00:00"))
@@ -469,7 +586,8 @@ def import_freebusy(user_id, access_token):
 
     def change(user):
         user["busy"] = merged
-        user["calendar"] = {"source": "google", "name": "Google Calendar (free/busy)",
+        user["calendar"] = {"source": "google",
+                            "name": "Google Calendar (free/busy" + (f", {used} calendars)" if used > 1 else ")"),
                             "importedAt": int(time() * 1000), "count": len(merged)}
     _modify_user(user_id, change)
     return len(merged)
@@ -484,8 +602,9 @@ def _revoke_google(account):
             pass
 
 
-def _back(error=None):
-    return redirect("/" + ("?" + urlencode({"auth_error": error}) if error else ""))
+def _back(error=None, *, linking=False):
+    # Linking starts from the profile page, so its errors are shown there too.
+    return redirect("/" + ("?" + urlencode({"auth_error": error}) if error else "") + ("#/me" if linking else ""))
 
 
 @auth_api.get("/google/start")
@@ -505,14 +624,14 @@ def google_start():
         "client_id": current_app.config["GOOGLE_CLIENT_ID"],
         "redirect_uri": _redirect_uri(),
         "response_type": "code",
-        "scope": GOOGLE_SCOPES,
+        "scope": CALENDAR_SCOPES if link else SIGN_IN_SCOPES,
         "state": state,
         "nonce": nonce,
         "code_challenge": challenge,
         "code_challenge_method": "S256",
         "access_type": "offline",
         "include_granted_scopes": "true",
-        # Linking (or reconnecting) the calendar must yield a fresh refresh token.
+        # Connecting (or updating) the calendar must show consent and yield a fresh refresh token.
         "prompt": "consent" if link else "select_account",
     }
     response = redirect(GOOGLE_AUTH_URL + "?" + urlencode(params))
@@ -531,11 +650,12 @@ def google_callback():
     state = request.args.get("state", "")
     if not isinstance(pending, dict) or not state or not secrets.compare_digest(state, pending.get("state", "")):
         return _finish(_back("google_state"))
+    linking = bool(pending.get("link"))
     if request.args.get("error"):
-        return _finish(_back("google_denied"))
+        return _finish(_back("google_denied", linking=linking))
     code = request.args.get("code", "")
     if not code or len(code) > 2048:
-        return _finish(_back("google_failed"))
+        return _finish(_back("google_failed", linking=linking))
     try:
         tokens = _http_json(GOOGLE_TOKEN_URL, form={
             "code": code,
@@ -548,8 +668,9 @@ def google_callback():
         claims = verify_id_token(tokens.get("id_token"), pending["nonce"])
     except GoogleError as error:
         current_app.logger.warning("Google sign-in failed: %s", error)
-        return _finish(_back("google_failed"))
-    if claims.get("email_verified") not in (True, "true"):
+        return _finish(_back("google_failed", linking=linking))
+    # A calendar request carries no email scope; the Google account id (sub) is enough to link.
+    if not linking and claims.get("email_verified") not in (True, "true"):
         return _finish(_back("google_unverified"))
 
     store = _store()
@@ -566,10 +687,18 @@ def google_callback():
         try:
             account = store.update(account["id"], google_sub=claims["sub"], **google_fields)
         except GoogleAccountTaken:
-            return _finish(_back("google_linked_elsewhere"))
+            return _finish(_back("google_linked_elsewhere", linking=True))
         account = ensure_profile(account)
-        response = redirect("/?linked=google#/me")
+        # Google lets people untick the calendar box; say so instead of claiming success.
+        if CALENDAR_SCOPE in scope.split():
+            response = redirect("/?linked=google#/me")
+        else:
+            response = _back("google_no_calendar", linking=True)
     else:
+        # Signing in never asks for the calendar, so it must not overwrite calendar access
+        # granted earlier (Google includes that scope here when it is still granted).
+        if CALENDAR_SCOPE not in scope.split():
+            google_fields = {}
         account = store.by_google(claims["sub"])
         if account:
             account = ensure_profile(store.update(account["id"], email=email, **google_fields))
@@ -581,8 +710,13 @@ def google_callback():
     access_token = tokens.get("access_token")
     if access_token and CALENDAR_SCOPE in scope.split():
         try:
-            import_freebusy(account["user_id"], access_token)
-        except (GoogleError, VersionConflict, MissingRecord) as error:
+            import_freebusy(account["user_id"], access_token, scope)
+        except GoogleError as error:
+            code, detail = _calendar_problem(error)
+            current_app.logger.warning("%s", detail)
+            # Signed in or linked, but no busy times were imported: say why instead of "connected".
+            response.location = _back(code, linking=bool(pending.get("link"))).location
+        except (VersionConflict, MissingRecord) as error:
             current_app.logger.warning("Google Calendar import failed: %s", type(error).__name__)
     return _finish(response)
 
@@ -631,12 +765,20 @@ def google_calendar_sync():
             "refresh_token": refresh_token,
             "grant_type": "refresh_token",
         })
-        count = import_freebusy(account["user_id"], tokens["access_token"])
+        count = import_freebusy(account["user_id"], tokens["access_token"],
+                                tokens.get("scope") or account.get("google_scope") or "")
     except GoogleError as error:
         if str(error) == "invalid_grant":  # Access was revoked in the Google account.
             _store().update(account["id"], google_refresh_token=None, google_scope="")
             return _error(409, "google_not_connected", "Google access was revoked. Connect Google Calendar again.")
-        return _error(502, "google_unavailable", "Could not reach Google Calendar. Try again.")
+        code, detail = _calendar_problem(error)
+        current_app.logger.warning("%s", detail)
+        if code == "google_calendar_api_disabled":
+            return _error(502, code, "The Google Calendar API is not enabled for this app. Enable it in "
+                          "Google Cloud Console (APIs & Services → Library → Google Calendar API), then sync again.")
+        if str(error) == "unreachable":
+            return _error(502, "google_unavailable", "Could not reach Google Calendar. Try again.")
+        return _error(502, code, f"Google Calendar said: {error.message or error}")
     except KeyError:
         return _error(502, "google_unavailable", "Google did not return an access token.")
     return jsonify(count=count)

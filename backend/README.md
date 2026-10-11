@@ -50,9 +50,11 @@ are stored as scrypt hashes. Failed logins are throttled per username (8 per 15
 minutes) and per IP; sign-ups per IP. Errors never reveal whether a username exists.
 
 Google sign-in uses the OAuth 2.0 authorization code flow with PKCE, `state` and
-`nonce`, entirely on the server. The single consent screen asks for
-`openid email profile` and `calendar.freebusy`; at sign-in Meadow imports the next
-60 days of busy times (no titles or details). The refresh token is encrypted with
+`nonce`, entirely on the server. Sign-in asks only for `openid email profile`.
+Connecting Google Calendar is a separate consent screen for `calendar.freebusy` and
+`calendar.calendarlist.readonly`; Meadow then imports the next 60 days of busy times
+from the primary calendar and every other calendar shown in Google Calendar (only
+calendar ids and busy ranges are fetched, never names, titles or details). The refresh token is encrypted with
 a key derived from `MEADOW_SECRET_KEY`. See `.env.example` for setup. Accounts and
 sessions live in the `meadow_accounts` and `meadow_sessions` Tiger tables
 (`backend/sql/002_auth.sql`, created by `tiger-init`) or in memory.

@@ -161,13 +161,16 @@
         M.google.configured()
           ? h('div', { class: 'google-slot' },
               V.googleButton(creating ? 'Sign up with Google' : 'Sign in with Google', M.google.signIn),
-              h('p', { class: 'hint small' }, 'Google will also ask to share your calendar’s free/busy times with Meadow. Event titles and details are never read.'))
+              h('p', { class: 'hint small' }, 'You can connect Google Calendar (free/busy only) from your profile afterwards.'))
           : null,
         M.google.configured() ? h('div', { class: 'divider' }, h('span', null, 'or use a username')) : null,
         form,
         h('p', { class: 'hint switch-mode' },
           creating ? 'Already have an account? ' : 'New to Meadow? ',
-          h('button', { type: 'button', class: 'link-btn', onClick: () => switchTo(creating ? 'signin' : 'signup') }, creating ? 'Sign in' : 'Create an account'))
+          h('button', { type: 'button', class: 'link-btn', onClick: () => switchTo(creating ? 'signin' : 'signup') }, creating ? 'Sign in' : 'Create an account')),
+        h('p', { class: 'hint small legal' },
+          'Meadow is a hackathon demo. Please don\u2019t share sensitive information. ',
+          h('a', { href: '/privacy', target: '_blank', rel: 'noopener' }, 'Privacy Policy'))
       )
     );
   };

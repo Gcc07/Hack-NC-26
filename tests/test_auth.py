@@ -188,7 +188,8 @@ def _id_token(**claims):
 
 
 class FakeGoogle:
-    def __init__(self, **overrides):
+    def __init__(self, scope=f"openid email profile {auth.CALENDAR_SCOPE}", **overrides):
+        self.scope = scope
         self.calls = []
         self.overrides = overrides
         self.nonce = None
@@ -202,7 +203,7 @@ class FakeGoogle:
                       "exp": 9999999999, "nonce": self.nonce}
             claims.update(self.overrides)
             return {"access_token": "access-1", "refresh_token": "refresh-1", "id_token": _id_token(**claims),
-                    "scope": f"openid email profile {auth.CALENDAR_SCOPE}"}
+                    "scope": self.scope}
         if url == auth.GOOGLE_TOKEN_URL:
             return {"access_token": "access-2"}
         if url == auth.GOOGLE_FREEBUSY_URL:
@@ -232,7 +233,7 @@ def test_google_start_follows_oauth_best_practice(client):
     params = {k: v[0] for k, v in parse_qs(url.query).items()}
     assert url.netloc == "accounts.google.com"
     assert params["response_type"] == "code" and params["code_challenge_method"] == "S256"
-    assert set(params["scope"].split()) == {"openid", "email", "profile", auth.CALENDAR_SCOPE}
+    assert set(params["scope"].split()) == {"openid", "email", "profile"}  # calendar is asked for separately
     assert params["access_type"] == "offline" and params["state"] and params["nonce"]
     assert params["redirect_uri"] == "http://localhost/api/auth/google/callback"
     cookie = response.headers["Set-Cookie"]
@@ -240,22 +241,30 @@ def test_google_start_follows_oauth_best_practice(client):
     assert params["state"] not in cookie  # signed and opaque, not a plain copy
 
 
-def test_google_sign_in_creates_account_and_imports_free_busy(app, client, monkeypatch):
-    _, params, callback, fake = google_sign_in(client, monkeypatch)
+def test_google_sign_in_then_separate_calendar_request(app, client, monkeypatch):
+    _, params, callback, fake = google_sign_in(client, monkeypatch, FakeGoogle(scope="openid email profile"))
     assert callback.status_code == 302 and callback.location == "/"
     token_form = fake.calls[0][1]
     assert token_form["code_verifier"] and token_form["client_secret"] == "shh"
     me = client.get("/api/auth/me").json["account"]
-    assert me["provider"] == "google" and me["googleCalendar"] and me["email"] == "maya@school.edu"
+    assert me["provider"] == "google" and not me["googleCalendar"] and me["email"] == "maya@school.edu"
+    # Connecting the calendar is its own consent screen asking for calendar access only.
+    _, params, callback, _ = google_sign_in(client, monkeypatch, link=True)
+    assert params["scope"] == [auth.CALENDAR_SCOPES] and params["prompt"] == ["consent"]
+    assert "email" not in params["scope"][0].split()
+    assert callback.location == "/?linked=google#/me"
+    me = client.get("/api/auth/me").json["account"]
+    assert me["googleCalendar"]
     user = client.get("/api/users/" + me["userId"]).json["data"]
     assert user["name"] == "Maya Chen" and user["calendar"]["source"] == "google"
     assert user["busy"] == [[1893492000000, 1893499200000]]  # overlapping blocks merged
     stored = app.extensions["auth_store"].by_google("google-1")
     assert stored["google_refresh_token"] and "refresh-1" not in stored["google_refresh_token"]
-    # Signing in again reuses the account.
+    # Signing in again reuses the account and keeps the calendar connection.
     again = app.test_client()
-    google_sign_in(again, monkeypatch)
+    google_sign_in(again, monkeypatch, FakeGoogle(scope="openid email profile"))
     assert again.get("/api/auth/me").json["account"]["userId"] == me["userId"]
+    assert again.get("/api/auth/me").json["account"]["googleCalendar"]
     assert client.post("/api/auth/google/calendar/sync").json == {"count": 1}
 
 
@@ -299,6 +308,164 @@ def test_linking_google_to_a_password_account(app, client, monkeypatch):
     assert me["userId"] == user_id and me["google"] and me["googleCalendar"]
     assert client.post("/api/auth/google/calendar/disconnect").status_code == 200
     assert not client.get("/api/auth/me").json["account"]["googleCalendar"]
+
+
+def test_calendar_request_needs_no_email_claim(client, monkeypatch):
+    signup(client)
+    # A calendar-only request has no email scope, so Google sends no email claims.
+    fake = FakeGoogle(email=None, email_verified=None)
+    _, _, callback, _ = google_sign_in(client, monkeypatch, fake, link=True)
+    assert callback.location == "/?linked=google#/me"
+    assert client.get("/api/auth/me").json["account"]["googleCalendar"]
+
+
+def test_updating_permissions_without_calendar_says_so(app, client, monkeypatch):
+    signup(client)
+    # The person unticked the calendar box on Google's consent screen.
+    _, _, callback, _ = google_sign_in(client, monkeypatch, FakeGoogle(scope="openid email profile"), link=True)
+    assert callback.location == "/?auth_error=google_no_calendar#/me"
+    me = client.get("/api/auth/me").json["account"]
+    assert me["google"] and not me["googleCalendar"]
+
+
+def test_linking_errors_return_to_the_profile(client, monkeypatch):
+    signup(client)
+    start = client.get("/api/auth/google/start?link=1")
+    state = parse_qs(urlparse(start.location).query)["state"][0]
+    response = client.get(f"/api/auth/google/callback?error=access_denied&state={state}")
+    assert response.location == "/?auth_error=google_denied#/me"
+
+
+@pytest.mark.parametrize("host, path, expected", [
+    ("127.0.0.1:5000", "/?x=1", "http://localhost:5000/?x=1"),
+    ("127.0.0.1:5000", "/api/auth/google/start?link=1", "http://localhost:5000/api/auth/google/start?link=1"),
+    ("127.0.0.1:5000", "/api/state", None),  # data calls are never bounced
+    ("localhost:5000", "/", None),
+    ("127.0.0.1:8000", "/", None),  # a different port is a different server
+    ("evil.example:5000", "/", None),  # never redirect to an unrelated host
+])
+def test_pages_move_to_the_google_redirect_host(host, path, expected):
+    client = create_app({"TESTING": True, "GOOGLE_CLIENT_ID": "id", "GOOGLE_CLIENT_SECRET": "shh",
+                         "GOOGLE_REDIRECT_URI": "http://localhost:5000/api/auth/google/callback"}).test_client()
+    response = client.get(path, base_url=f"http://{host}")
+    assert (response.location if response.status_code == 302 else None) == expected
+
+
+def test_www_and_bare_domain_share_one_host():
+    client = create_app({"TESTING": True, "GOOGLE_CLIENT_ID": "id", "GOOGLE_CLIENT_SECRET": "shh",
+                         "GOOGLE_REDIRECT_URI": "https://meadow.example/api/auth/google/callback"}).test_client()
+    response = client.get("/", base_url="https://www.meadow.example")
+    assert response.status_code == 302 and response.location == "https://meadow.example/"
+
+
+@pytest.mark.parametrize("host, expected", [
+    ("localhost:5000", "http://localhost:5000/api/auth/google/callback"),
+    ("meadow.example", "http://meadow.example/api/auth/google/callback"),  # a laptop .env on the server
+])
+def test_localhost_redirect_uri_is_ignored_on_another_host(host, expected):
+    client = create_app({"TESTING": True, "GOOGLE_CLIENT_ID": "id", "GOOGLE_CLIENT_SECRET": "shh",
+                         "GOOGLE_REDIRECT_URI": "http://localhost:5000/api/auth/google/callback"}).test_client()
+    response = client.get("/api/auth/google/start", base_url=f"http://{host}")
+    assert parse_qs(urlparse(response.location).query)["redirect_uri"] == [expected]
+
+
+class GoogleCalendarDown(FakeGoogle):
+    """Token exchange works, but the free/busy call fails the way Google reports it."""
+
+    def __init__(self, failure, **kwargs):
+        super().__init__(**kwargs)
+        self.failure = failure
+
+    def __call__(self, url, **kwargs):
+        if url == auth.GOOGLE_FREEBUSY_URL:
+            if isinstance(self.failure, Exception):
+                raise self.failure
+            return self.failure
+        return super().__call__(url, **kwargs)
+
+
+API_DISABLED = auth.GoogleError("accessNotConfigured", "Google Calendar API has not been used in project 123.")
+
+
+def test_connect_reports_a_disabled_calendar_api(client, monkeypatch):
+    signup(client)
+    _, _, callback, _ = google_sign_in(client, monkeypatch, GoogleCalendarDown(API_DISABLED), link=True)
+    assert callback.location == "/?auth_error=google_calendar_api_disabled#/me"
+    assert client.get("/api/auth/me").json["account"]["googleCalendar"]  # access itself was granted
+    response = client.post("/api/auth/google/calendar/sync")
+    assert response.status_code == 502 and response.json["error"]["code"] == "google_calendar_api_disabled"
+    assert "Google Calendar API" in response.json["error"]["message"]
+
+
+def test_sync_reports_googles_reason(client, monkeypatch):
+    signup(client)
+    fake = GoogleCalendarDown({"calendars": {"primary": {"errors": [{"domain": "global", "reason": "notFound"}]}}})
+    _, _, callback, _ = google_sign_in(client, monkeypatch, fake, link=True)
+    assert callback.location == "/?auth_error=google_calendar_failed#/me"
+    response = client.post("/api/auth/google/calendar/sync")
+    assert response.status_code == 502 and response.json["error"]["code"] == "google_calendar_failed"
+    assert "primary calendar" in response.json["error"]["message"]
+
+
+def test_google_api_errors_keep_their_reason(monkeypatch):
+    import io
+    from urllib.error import HTTPError
+    body = json.dumps({"error": {"code": 403, "message": "Calendar API disabled", "status": "PERMISSION_DENIED",
+                                 "errors": [{"reason": "accessNotConfigured"}]}}).encode()
+    def fail(*args, **kwargs):
+        raise HTTPError("https://x", 403, "Forbidden", {}, io.BytesIO(body))
+    monkeypatch.setattr(auth, "urlopen", fail)
+    with pytest.raises(auth.GoogleError) as caught:
+        auth._http_json(auth.GOOGLE_FREEBUSY_URL, body={}, token="t")
+    assert str(caught.value) == "accessNotConfigured" and caught.value.message == "Calendar API disabled"
+
+
+class GoogleWithCalendars(FakeGoogle):
+    """A person with a school calendar, a hidden one, holidays, and a shared calendar we cannot read."""
+
+    def __init__(self):
+        super().__init__(scope=f"openid {auth.CALENDAR_SCOPE} {auth.CALENDAR_LIST_SCOPE}")
+        self.queried = None
+
+    def __call__(self, url, **kwargs):
+        if url.startswith(auth.GOOGLE_CALENDAR_LIST_URL + "?"):
+            assert "items(id," in parse_qs(urlparse(url).query)["fields"][0]  # never calendar names
+            return {"items": [
+                {"id": "maya@school.edu", "primary": True, "selected": True},
+                {"id": "classes@group.calendar.google.com", "selected": True},
+                {"id": "old@group.calendar.google.com", "selected": True, "hidden": True},
+                {"id": "unticked@group.calendar.google.com"},
+                {"id": "en.usa#holiday@group.v.calendar.google.com", "selected": True},
+                {"id": "boss@work.example", "selected": True}]}
+        if url == auth.GOOGLE_FREEBUSY_URL:
+            self.queried = [item["id"] for item in kwargs["body"]["items"]]
+            return {"calendars": {
+                "primary": {"busy": [{"start": "2030-01-01T10:00:00Z", "end": "2030-01-01T11:00:00Z"}]},
+                "classes@group.calendar.google.com": {"busy": [{"start": "2030-01-02T14:00:00Z", "end": "2030-01-02T15:00:00Z"}]},
+                "boss@work.example": {"errors": [{"domain": "global", "reason": "notFound"}]}}}
+        return super().__call__(url, **kwargs)
+
+
+def test_other_calendars_are_included(client, monkeypatch):
+    signup(client)
+    fake = GoogleWithCalendars()
+    _, params, callback, _ = google_sign_in(client, monkeypatch, fake, link=True)
+    assert auth.CALENDAR_LIST_SCOPE in params["scope"][0].split()
+    assert callback.location == "/?linked=google#/me"
+    assert fake.queried == ["primary", "classes@group.calendar.google.com", "boss@work.example"]
+    me = client.get("/api/auth/me").json["account"]
+    assert me["googleCalendar"] and me["googleCalendarList"]
+    user = client.get("/api/users/" + me["userId"]).json["data"]
+    assert len(user["busy"]) == 2 and user["calendar"]["name"] == "Google Calendar (free/busy, 2 calendars)"
+
+
+def test_older_grants_still_read_the_primary_calendar(client, monkeypatch):
+    signup(client)
+    fake = GoogleWithCalendars()
+    fake.scope = f"openid {auth.CALENDAR_SCOPE}"  # granted before the calendar list was asked for
+    google_sign_in(client, monkeypatch, fake, link=True)
+    assert fake.queried == ["primary"]
+    assert not client.get("/api/auth/me").json["account"]["googleCalendarList"]
 
 
 def test_google_is_optional(monkeypatch):

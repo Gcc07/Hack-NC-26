@@ -206,6 +206,9 @@
     google_state: 'That Google sign-in link expired. Please try again.',
     google_unverified: 'Your Google account email is not verified.',
     google_linked_elsewhere: 'That Google account is already linked to another Meadow account.',
+    google_calendar_api_disabled: 'Google Calendar is connected, but the Google Calendar API is not enabled for this app. Enable it in Google Cloud Console (APIs & Services → Library), then click “Sync Google Calendar”.',
+    google_calendar_failed: 'Google Calendar is connected, but importing your busy times failed. Click “Sync Google Calendar” to see why.',
+    google_no_calendar: 'Google didn’t share your calendar. Click “Update Google permissions” and tick the calendar box.',
     google_not_configured: 'Google sign-in is not set up on this server.',
     session_expired: 'Your session expired. Please sign in again.',
   };
@@ -216,7 +219,9 @@
     link: () => location.assign('/api/auth/google/start?link=1'),
     async sync() {
       const { count } = await M.auth.syncCalendar();
+      // The server wrote the busy times; save local edits, then load its copy right away.
       await M.store.flush().catch(() => {});
+      await M.store.refresh();
       return count;
     },
   };
