@@ -48,6 +48,48 @@
     return wrap;
   };
 
+  /* Login hero: a tightly packed vertical montage of every Meadow logo. It pans downward fast, then eases out
+     and comes to rest on the wide logo + tagline. The pan plays once per page load; if the screen re-renders
+     mid-pan it resumes where it left off, and afterwards it shows the resting state. */
+  const REEL_IMAGES = {
+    one: ['Assets/Meadow1.png', 256, 256],
+    two: ['Assets/Meadow2.png', 256, 256],
+    three: ['Assets/Meadow3.png', 450, 337],
+    wide: ['Assets/meadow_2.png', 484, 256],
+  };
+  const reelTile = (key, cls) => {
+    const [src, width, height] = REEL_IMAGES[key];
+    return h('img', { class: 'reel-tile' + (cls ? ' ' + cls : ''), src, width, height, alt: key === 'wide' && cls ? 'Meadow' : '', draggable: 'false' });
+  };
+  const REEL_MS = 9000;
+  let reelStart = null; // the pan runs once per page load; a re-render resumes it at the right moment
+  V.logoReel = function () {
+    const above = h('div', { class: 'reel-above', 'aria-hidden': 'true' }, ['two', 'three', 'one'].map((k) => reelTile(k)));
+    const belowKeys = [];
+    for (let i = 0; i < 3; i++) belowKeys.push('three', 'two', 'one', 'wide');
+    const below = h('div', { class: 'reel-below', 'aria-hidden': 'true' }, belowKeys.map((k) => reelTile(k)));
+    const belowBox = h('div', { class: 'reel-below-box' }, below);
+    const main = h('div', { class: 'reel-main-block' }, reelTile('wide', 'reel-main'), h('h1', { class: 'tagline' }, TAGLINE));
+    const col = h('div', { class: 'reel-col' }, above, main, belowBox);
+    if (reelStart === null) reelStart = performance.now();
+    const playing = performance.now() - reelStart < REEL_MS;
+    const reel = h('div', { class: 'reel' + (playing ? ' reel-pending' : '') }, col);
+    if (playing) {
+      setTimeout(() => {
+        reel.classList.remove('reel-pending');
+        const calm = window.matchMedia('(max-width: 760px), (prefers-reduced-motion: reduce)').matches;
+        if (calm || !col.isConnected || !col.animate) return;
+        const distance = Math.max(0, below.offsetHeight - reel.clientHeight / 2 - 20);
+        const run = col.animate(
+          [{ transform: `translateY(calc(-50% - ${distance}px))` }, { transform: 'translateY(-50%)' }],
+          { duration: REEL_MS, easing: 'cubic-bezier(.08,.6,.12,1)', fill: 'both' }
+        );
+        run.currentTime = Math.min(REEL_MS, performance.now() - reelStart);
+      }, 0);
+    }
+    return reel;
+  };
+
   V.login = function () {
     const pending = sessionStorage.getItem('meadow:pendingJoin');
     const profiles = Object.values(S().users).filter((u) => !u.placeholder).sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
@@ -71,15 +113,7 @@
       h(
         'div',
         { class: 'login-hero' },
-        h('div', { class: 'hero-brand' }, M.logo(96), h('span', { class: 'wordmark' }, 'Meadow')),
-        h('div', { class: 'desktop-label' }, M.icon('leaf', 18), 'A little space to come together'),
-        h('h1', { class: 'hero-heading' }, 'Good things grow', h('br'), 'with good company.'),
-        h('p', { class: 'tagline' }, TAGLINE),
-        h('p', { class: 'lede' }, 'Find your people. Make a plan. Bring it to life. Your student org’s sunny little corner of the internet.'),
-        h('ul', { class: 'bullets' },
-          h('li', null, M.icon('calendar'), h('span', null, 'Find a time', h('small', null, 'Share availability. Keep the details private.'))),
-          h('li', null, M.icon('drop'), h('span', null, 'A little help from Dewey', h('small', null, 'Your planning buddy. You make the call.'))),
-          h('li', null, M.icon('flower'), h('span', null, 'Watch your plans bloom', h('small', null, 'Real people. Real roles. Things get done.'))))
+        V.logoReel()
       ),
       h(
         'div',
