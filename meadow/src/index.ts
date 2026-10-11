@@ -2,6 +2,7 @@ import { Spectrum } from "spectrum-ts";
 import { imessage } from "@spectrum-ts/imessage";
 
 import { createBackendClient } from "./backend/client.ts";
+import { ensureBackendBridge } from "./backend/ensure.ts";
 import { Dewey } from "./bot/dewey.ts";
 import { handleInbound } from "./bot/handler.ts";
 import { startBridgeServer, type BridgeMode } from "./bridge/server.ts";
@@ -48,6 +49,14 @@ if (backend.enabled) {
   console.log(
     `[meadow] Flask ${backend.baseUrl} — ${up ? "up" : "DOWN"}; Gemini ${ai ? "on" : "off"}`
   );
+  if (up) {
+    const ensured = await ensureBackendBridge(backend);
+    console.log(
+      ensured.ok
+        ? `[meadow] Flask bridge records ready (${ensured.detail})`
+        : `[meadow] Flask bridge ensure failed: ${ensured.detail}`
+    );
+  }
 } else {
   console.log("[meadow] BACKEND_URL unset — local store only (no Gemini/Flask sync)");
 }

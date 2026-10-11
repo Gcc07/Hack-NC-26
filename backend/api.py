@@ -4,7 +4,7 @@ from flask import Blueprint, current_app, jsonify, request, url_for
 from werkzeug.exceptions import BadRequest, NotFound
 
 from .models import SCHEMAS, DEFAULTS, ValidationError, validate
-from .repository import RESOURCES, VersionConflict
+from .repository import RESOURCES, MissingRecord, VersionConflict
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
@@ -83,12 +83,24 @@ def collection(resource):
     return jsonify(data=records[offset:offset + limit], total=len(records), limit=limit, offset=offset)
 
 
-@api.route("/<resource>/<record_id>", methods=["GET", "PATCH", "DELETE"])
+@api.route("/<resource>/<record_id>", methods=["GET", "PUT", "PATCH", "DELETE"])
 def item(resource, record_id):
     repo = repository(resource)
     if request.method == "DELETE":
         repo.delete(resource, record_id)
         return "", 204
+    if request.method == "PUT":
+        # Bridge bootstrap: create with a fixed id if missing; leave existing rows alone.
+        body = request.get_json()
+        if not isinstance(body, dict):
+            raise ValidationError("Body must be a JSON object.")
+        try:
+            return jsonify(data=repo.get(resource, record_id), created=False)
+        except MissingRecord:
+            record = repo.ensure(resource, record_id, validate(resource, body))
+            response = jsonify(data=record, created=True)
+            response.status_code = 201
+            return response
     record = repo.get(resource, record_id)
     if request.method == "PATCH":
         body = request.get_json()

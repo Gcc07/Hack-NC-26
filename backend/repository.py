@@ -28,6 +28,7 @@ class Repository(Protocol):
     def list(self, resource: str) -> list[Record]: ...
     def get(self, resource: str, record_id: str) -> Record: ...
     def create(self, resource: str, data: Record) -> Record: ...
+    def ensure(self, resource: str, record_id: str, data: Record) -> Record: ...
     def replace(self, resource: str, record_id: str, data: Record, version: int) -> Record: ...
     def delete(self, resource: str, record_id: str) -> None: ...
     def snapshot(self) -> Record: ...
@@ -60,6 +61,19 @@ class InMemoryRepository:
             record = {**deepcopy(data), "id": uuid4().hex, "createdAt": now,
                       "updatedAt": now, "version": 1}
             self._records[resource][record["id"]] = record
+            self._revision += 1
+            return deepcopy(record)
+
+    def ensure(self, resource, record_id, data):
+        """Create with a client-chosen id if missing; otherwise return the existing row."""
+        with self._lock:
+            existing = self._records[resource].get(record_id)
+            if existing is not None:
+                return deepcopy(existing)
+            now = time_ns() // 1_000_000
+            record = {**deepcopy(data), "id": record_id, "createdAt": now,
+                      "updatedAt": now, "version": 1}
+            self._records[resource][record_id] = record
             self._revision += 1
             return deepcopy(record)
 
