@@ -1,0 +1,32 @@
+# systemd unit for the Meadow iMessage bridge (Photon Spectrum, runs from ./meadow).
+#
+# Needs Node 20+ on the server:   sudo dnf install -y nodejs   (Amazon Linux)
+#                                 sudo apt install -y nodejs npm (Ubuntu; may be old, prefer NodeSource 20+)
+#
+# Install:
+#   cd ~/Hack-NC-26/meadow && npm install
+#   cp .env.example .env && nano .env      (PROJECT_ID, PROJECT_SECRET, BRIDGE_MODE, MEADOW_BRIDGE_SECRET)
+#   sudo cp ~/Hack-NC-26/deploy/meadow-bridge.service /etc/systemd/system/meadow-bridge.service
+#   (edit User / paths below if your username or clone location differs; check `which npm`)
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now meadow-bridge
+#
+# Health:  curl -s http://127.0.0.1:5055/health
+# Logs:    journalctl -u meadow-bridge -f
+# Update:  git pull && (cd meadow && npm install) && sudo systemctl restart meadow-bridge
+
+[Unit]
+Description=Meadow iMessage bridge (Spectrum)
+After=network-online.target meadow.service
+Wants=network-online.target
+
+[Service]
+User=ec2-user
+WorkingDirectory=/home/ec2-user/Hack-NC-26/meadow
+# meadow/.env (PROJECT_ID, PROJECT_SECRET, BACKEND_URL, BRIDGE_MODE, ...) is loaded by `npm start` itself.
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

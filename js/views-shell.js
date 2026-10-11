@@ -295,6 +295,14 @@
     return M.isFree(M.userIntervals(state, user.id), now, now + 15 * M.MIN);
   }
 
+  /* Buddy List header icon: Assets/buddy.png, falling back to the built-in "people" icon if the file is missing. */
+  V.buddyIcon = function (size) {
+    const fallback = () => M.icon('people', size);
+    const img = h('img', { class: 'buddy-icon', src: 'Assets/buddy.png?v=1', alt: '', width: size, height: size, 'aria-hidden': 'true' });
+    img.addEventListener('error', () => img.replaceWith(fallback()), { once: true });
+    return img;
+  };
+
   V.buddies = function (me, org) {
     const state = S();
     const statusMsg = h('input', { 'data-keep': 'status-msg', id: 'status-msg', placeholder: 'Set an away message…', value: me.away || '', maxlength: 140, 'aria-label': 'Away message' });
@@ -343,7 +351,7 @@
     return h(
       'aside',
       { class: 'buddies glass', 'aria-label': 'Buddy list' },
-      h('div', { class: 'buddy-head' }, h('strong', { class: 'icon-label' }, M.icon('people', 22), 'Buddy List'), h('span', { class: 'hint' }, 'who’s around')),
+      h('div', { class: 'buddy-head' }, h('strong', { class: 'icon-label' }, V.buddyIcon(26), 'Buddy List'), h('span', { class: 'hint' }, 'who’s around')),
       h('div', { class: 'my-status' },
         h('div', { class: 'row tight' }, M.avatar(me, 28), h('strong', null, M.firstName(me.name)), presence),
         statusMsg,
