@@ -16,9 +16,35 @@
   el.innerHTML =
     '<span class="eyey-clip"><span class="eyey-sway"><img class="eyey-img" src="Assets/EYEY2.png" alt="" draggable="false" width="62" height="80"></span></span>' +
     '<span class="eyey-mound"></span><span class="eyey-hole"></span>' +
+    '<span class="eyey-say" role="status" aria-live="polite"></span>' +
     '<span class="eyey-puffs"><i></i><i></i><i></i><i></i><i></i><i></i></span>';
 
   let busy = true;
+
+  /* Eyey talks a little: one short line each time he pops up, like a buddy-list pop-up. */
+  const LINES = [
+    'Psst. New here? Make an account and I’ll help your org find a meeting time.',
+    'Hover me and I’ll hop somewhere else.',
+    'Officers: I keep track of which jobs still need a person.',
+  ];
+  const PRIVACY = 'I only ever see when you’re busy, never what you’re doing.';
+  const say = el.querySelector('.eyey-say');
+  let line = 0, sayTimer = 0;
+  function speak(text, ms) {
+    if (busy || el.classList.contains('is-hidden') || document.documentElement.dataset.view !== 'login') return;
+    clearTimeout(sayTimer);
+    say.textContent = text;
+    // Open toward whichever side has more room, never wider than that room, and stay quiet rather than cover the sign-in window.
+    const half = (el.offsetWidth || 93) / 2, roomRight = window.innerWidth - spotX - half - 18, roomLeft = spotX - half - 18;
+    say.dataset.side = roomRight >= roomLeft ? 'right' : 'left';
+    say.style.maxWidth = Math.max(120, Math.min(220, Math.max(roomRight, roomLeft))) + 'px';
+    el.classList.add('is-talking');
+    const card = document.querySelector('.login-card');
+    const a = say.getBoundingClientRect(), c = card && card.getBoundingClientRect();
+    if (c && a.right > c.left && a.left < c.right && a.bottom > c.top && a.top < c.bottom) return hush();
+    sayTimer = setTimeout(hush, ms || 6000);
+  }
+  function hush() { clearTimeout(sayTimer); el.classList.remove('is-talking'); }
   let spotX = null; // current centre x in px
 
   /* Pick a spot in the grass that stays clear of the sign-in card, the left effect buttons and the status chip. */
@@ -54,12 +80,14 @@
     setTimeout(() => {
       el.classList.remove('is-rising');
       busy = false;
+      speak(LINES[line++ % LINES.length]);
       if (done) done();
     }, RISE_MS);
   }
 
   function burrow() {
     if (busy) return;
+    hush();
     busy = true;
     el.classList.add('is-burrowing');
     setTimeout(() => {
@@ -73,12 +101,18 @@
   }
 
   el.addEventListener('pointerenter', burrow);
+  // The privacy promise, right when someone is deciding whether to sign up.
+  document.addEventListener('pointerover', (e) => {
+    if (e.target.closest && e.target.closest('.switch-mode .link-btn, #signup-password')) speak(PRIVACY, 5000);
+  });
   el.addEventListener('click', burrow); // touch taps and keyboard (Enter / Space)
 
   let resizeTimer = 0;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { if (!busy) plant(pickSpot(null)); }, 150);
+    // Replant once he is above ground again, so a resize mid-animation never strands him off-screen.
+    const replant = () => { if (busy) resizeTimer = setTimeout(replant, 300); else { hush(); plant(pickSpot(null)); } };
+    resizeTimer = setTimeout(replant, 150);
   });
 
   function start() {

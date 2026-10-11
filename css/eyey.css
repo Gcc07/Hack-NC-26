@@ -8,7 +8,7 @@
 }
 .eyey:focus-visible { outline: 3px solid #fff; outline-offset: 6px; border-radius: 14px; }
 html[data-view="app"] .eyey { display: none; }
-@media (max-width: 760px) { .eyey { display: none; } }
+@media (max-width: 760px) { .eyey { --w: 62px; } }
 
 /* The clip box ends at the ground line; the sprite sinks below it when he burrows. */
 .eyey-clip { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
@@ -67,3 +67,18 @@ html[data-view="app"] .eyey { display: none; }
   .eyey.is-burrowing .eyey-img, .eyey.is-hidden .eyey-img { opacity: 0; transform: none; }
   .eyey.is-rising .eyey-img { opacity: 1; transform: none; }
 }
+
+/* Eyey's speech balloon: glossy white Aero bubble beside him, tail pointing at his face. */
+.eyey-say { position: absolute; bottom: 52%; left: calc(100% + 10px); width: max-content; max-width: 220px; padding: 9px 13px;
+  font: 600 13px/1.35 var(--font, "Segoe UI", sans-serif); color: #0f3a5a; text-align: left; letter-spacing: .01em;
+  background: linear-gradient(180deg, #ffffff 0%, #f0f9ff 55%, #dcf1ff 100%); border: 1px solid #7fb9e0; border-radius: 16px;
+  box-shadow: 0 8px 20px rgba(11, 70, 130, .25), 0 1px 0 #fff inset; pointer-events: none;
+  opacity: 0; transform: scale(.9); transform-origin: 0 100%; transition: opacity .2s ease, transform .25s cubic-bezier(.34, 1.56, .64, 1); }
+.eyey-say::after { content: ""; position: absolute; bottom: 12px; left: -7px; width: 12px; height: 12px;
+  background: #e4f4ff; border-left: 1px solid #7fb9e0; border-bottom: 1px solid #7fb9e0; transform: rotate(45deg); }
+.eyey-say[data-side="left"] { left: auto; right: calc(100% + 10px); transform-origin: 100% 100%; }
+.eyey-say[data-side="left"]::after { left: auto; right: -7px; transform: rotate(-135deg); }
+.eyey.is-talking .eyey-say { opacity: 1; transform: scale(1); }
+.eyey-say:empty { display: none; }
+@media (prefers-reduced-motion: reduce) { .eyey-say { transition: opacity .2s ease; } }
+@media (max-width: 760px) { .eyey-say { max-width: 170px; font-size: 12px; } }
