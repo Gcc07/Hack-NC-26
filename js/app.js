@@ -42,8 +42,10 @@
   function handleSpecialRoutes() {
     const r = M.ui.route;
     if (r.name === 'as') {
-      if (S().users[r.userId]) {
-        M.session.set(r.userId);
+      // Only demo cast members can be borrowed; real people are behind their own logins.
+      const u = S().users[r.userId];
+      if (u && u.demo) {
+        M.session.actAs(r.userId);
         M.store.update((s) => (s.users[r.userId].lastSeen = Date.now()), { silent: true });
       }
       location.replace('#/');
@@ -160,11 +162,13 @@
 
   /* ------------------------------------------------------------------ shell */
   function buildApp() {
-    if (!M.store.ready()) return h('div', { class: 'login' },
-      h('div', { class: 'login-card glass' }, h('h1', null, 'Connecting to Meadow…'),
-        h('p', null, 'Your shared data will appear when Flask is connected.')));
+    const connecting = (text) => h('div', { class: 'login' },
+      h('div', { class: 'login-card glass' }, h('h1', null, 'Connecting to Meadow…'), h('p', null, text)));
+    if (!M.auth.checked) return connecting('Checking your sign-in…');
+    if (!M.auth.account) return M.views.login();
+    if (!M.store.ready()) return connecting('Your shared data will appear when Flask is connected.');
     const me = M.me();
-    if (!me) return M.views.login();
+    if (!me) return connecting('Setting up your profile…');
     const r = M.ui.route;
     const orgs = M.myOrgs(me.id);
     let org = r.orgId && S().orgs[r.orgId];
@@ -195,70 +199,42 @@
     );
   }
 
-  /* ------------------------------------------------------------------ Google (optional) */
+  /* ------------------------------------------------------------------ Google (optional, server-side OAuth) */
+  const AUTH_ERRORS = {
+    google_denied: 'Google sign-in was cancelled.',
+    google_failed: 'Google sign-in failed. Please try again.',
+    google_state: 'That Google sign-in link expired. Please try again.',
+    google_unverified: 'Your Google account email is not verified.',
+    google_linked_elsewhere: 'That Google account is already linked to another Meadow account.',
+    google_not_configured: 'Google sign-in is not set up on this server.',
+    session_expired: 'Your session expired. Please sign in again.',
+  };
   M.google = {
-    configured: () => !!(window.MEADOW_CONFIG && window.MEADOW_CONFIG.GOOGLE_CLIENT_ID),
-    loadScript() {
-      return new Promise((res, rej) => {
-        if (window.google && window.google.accounts) return res();
-        const s = document.createElement('script');
-        s.src = 'https://accounts.google.com/gsi/client';
-        s.async = true;
-        s.onload = res;
-        s.onerror = () => rej(new Error('Could not load Google sign-in.'));
-        document.head.append(s);
-      });
-    },
-    async renderButton(el) {
-      try {
-        await M.google.loadScript();
-        window.google.accounts.id.initialize({
-          client_id: window.MEADOW_CONFIG.GOOGLE_CLIENT_ID,
-          callback: (resp) => {
-            try {
-              const payload = JSON.parse(decodeURIComponent(escape(atob(resp.credential.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))));
-              M.act.signIn({ name: payload.name, email: payload.email, photo: payload.picture, google: true });
-              afterLogin();
-            } catch (e) {
-              M.toast('Google sign-in failed: ' + e.message);
-            }
-          },
-        });
-        window.google.accounts.id.renderButton(el, { theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with' });
-      } catch (e) {
-        el.textContent = e.message;
-      }
-    },
-    async connectCalendar(uid) {
-      await M.google.loadScript();
-      return new Promise((resolve, reject) => {
-        const client = window.google.accounts.oauth2.initTokenClient({
-          client_id: window.MEADOW_CONFIG.GOOGLE_CLIENT_ID,
-          scope: 'https://www.googleapis.com/auth/calendar.freebusy', // free/busy only — no event details
-          callback: async (resp) => {
-            if (resp.error) return reject(new Error(resp.error));
-            try {
-              const now = new Date();
-              const r = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
-                method: 'POST',
-                headers: { Authorization: 'Bearer ' + resp.access_token, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ timeMin: now.toISOString(), timeMax: new Date(+now + 60 * M.DAY).toISOString(), items: [{ id: 'primary' }] }),
-              });
-              const j = await r.json();
-              const busy = ((j.calendars && j.calendars.primary && j.calendars.primary.busy) || []).map((b) => [Date.parse(b.start), Date.parse(b.end)]);
-              M.act.setBusy(uid, busy, { source: 'google', name: 'Google Calendar (free/busy)', count: busy.length });
-              resolve(busy.length);
-            } catch (e) {
-              reject(e);
-            }
-          },
-        });
-        client.requestAccessToken();
-      });
+    configured: () => M.auth.googleEnabled,
+    // Full-page redirects: the server runs the OAuth code flow and keeps all Google tokens.
+    signIn: () => location.assign('/api/auth/google/start'),
+    link: () => location.assign('/api/auth/google/start?link=1'),
+    async sync() {
+      const { count } = await M.auth.syncCalendar();
+      await M.store.flush().catch(() => {});
+      return count;
     },
   };
 
-  function afterLogin() {
+  /** Show (once) an error the Google callback put in the URL, then remove it. */
+  let linkedGoogle = false;
+  function takeAuthError() {
+    const params = new URLSearchParams(location.search);
+    const code = params.get('auth_error');
+    linkedGoogle = params.get('linked') === 'google';
+    if (code) M.auth.notice = AUTH_ERRORS[code] || 'Sign-in failed. Please try again.';
+    if (code || linkedGoogle) history.replaceState(null, '', location.pathname + location.hash);
+  }
+
+  async function afterLogin() {
+    M.render();
+    await M.store.init();
+    if (M.store.ready()) M.safe(M.act.heartbeat);
     const pending = sessionStorage.getItem('meadow:pendingJoin');
     if (pending) {
       sessionStorage.removeItem('meadow:pendingJoin');
@@ -274,7 +250,8 @@
   /* ------------------------------------------------------------------ boot */
   function onRoute() {
     parseHash();
-    if (!M.store.ready()) { M.render(); return; }
+    if (!M.auth.account && M.ui.route.name === 'join') sessionStorage.setItem('meadow:pendingJoin', M.ui.route.code);
+    if (!M.auth.account || !M.store.ready()) { M.render(); return; }
     if (handleSpecialRoutes()) return;
     M.render();
   }
@@ -286,11 +263,24 @@
   });
 
   document.addEventListener('DOMContentLoaded', async () => {
+    takeAuthError();
     M.render();
-    await M.store.init();
+    await M.auth.check();
+    if (M.auth.account) {
+      await M.store.init();
+      if (M.auth.notice) M.toast(M.auth.notice);
+      if (linkedGoogle) M.toast('Google Calendar connected');
+      M.auth.notice = '';
+      // An invite opened before a Google sign-in redirect survives in this tab's sessionStorage.
+      const pendingJoin = sessionStorage.getItem('meadow:pendingJoin');
+      if (pendingJoin) {
+        sessionStorage.removeItem('meadow:pendingJoin');
+        location.replace('#/join/' + pendingJoin);
+      }
+    }
     onRoute();
     if (M.store.ready()) M.safe(M.act.heartbeat);
-    setInterval(() => { if (M.store.ready()) M.safe(M.act.heartbeat); }, 20000);
+    setInterval(() => { if (M.auth.account && M.store.ready()) M.safe(M.act.heartbeat); }, 20000);
     setInterval(() => {
       if (!document.hidden) M.render();
     }, 45000);

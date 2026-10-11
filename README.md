@@ -295,7 +295,7 @@ another tab saves first, the stale edit is rejected and you are asked to repeat
 it. Use `python app.py`; opening `index.html` or the old static server alone will
 not provide the API.
 
-Click **Launch the demo org**, then use the buddy list's "Demo: be someone else" to open other members in new tabs. Optional Google sign-in / calendar import: set `GOOGLE_CLIENT_ID` in `js/config.js`. Optional Gemini upgrade for Dewey: set `GEMINI_API_KEY` in `.env` and restart (the key stays on the server).
+Create an account (or sign in with Google), click **Load demo org**, then use the buddy list's "Demo: be someone else" to open demo members in new tabs. Optional Google sign-in / calendar import: see *Accounts and sign-in* in `backend/README.md`. Optional Gemini upgrade for Dewey: set `GEMINI_API_KEY` in `.env` and restart (the key stays on the server).
 
 Never commit API keys, database credentials, or client secrets.
 

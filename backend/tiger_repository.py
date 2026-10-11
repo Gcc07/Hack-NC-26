@@ -68,11 +68,12 @@ class TigerRepository:
         """Install hypertables and search tables. Safe to run again."""
         from psycopg.types.json import Jsonb
         from .tiger_search import init_search_schema
-        script = Path(__file__).with_name("sql").joinpath("001_tiger.sql").read_text()
+        scripts = sorted(Path(__file__).with_name("sql").glob("*.sql"))
         # Timescale DDL is applied one statement at a time, outside a wrapping transaction.
         with self.connection(autocommit=True) as conn:
-            for statement in split_sql(script):
-                conn.execute(statement)
+            for script in scripts:
+                for statement in split_sql(script.read_text()):
+                    conn.execute(statement)
         with self.connection() as conn:
             initial = InMemoryRepository().snapshot()
             conn.execute("INSERT INTO meadow_state(singleton,document,revision,instance) VALUES(true,%s,0,%s) ON CONFLICT DO NOTHING", (Jsonb(initial["state"]), initial["instance"]))

@@ -48,21 +48,56 @@
     return wrap;
   };
 
+  /* Official "Sign in with Google" button, per Google's branding guidelines
+     (developers.google.com/identity/branding-guidelines): standard multicolor "G" on white,
+     Roboto Medium 14/20, #1F1F1F text, 1px #747775 stroke, 40px tall, 12px side padding,
+     10px gap. Only the approved labels are used. */
+  const GOOGLE_G = '<svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true" focusable="false"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
+  V.googleButton = function (label, onClick) {
+    const logo = h('span', { class: 'gsi-icon' });
+    logo.innerHTML = GOOGLE_G;
+    return h('button', { type: 'button', class: 'gsi-button', onClick }, logo, h('span', { class: 'gsi-label' }, label));
+  };
+
   V.login = function () {
     const pending = sessionStorage.getItem('meadow:pendingJoin');
-    const profiles = Object.values(S().users).filter((u) => !u.placeholder).sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
-    const nameIn = h('input', { id: 'login-name', 'data-keep': 'login-name', placeholder: 'Your name', autocomplete: 'name', required: true });
-    const emailIn = h('input', { id: 'login-email', 'data-keep': 'login-email', type: 'email', placeholder: 'you@school.edu (optional)', autocomplete: 'email' });
-    const googleSlot = h('div', { class: 'google-slot' });
-    if (M.google.configured()) setTimeout(() => M.google.renderButton(googleSlot), 0);
+    const mode = M.ui.loginMode || 'signin';
+    const creating = mode === 'signup';
+    const field = (id, label, attrs) => [h('label', { for: id }, label), h('input', { id, 'data-keep': id, required: true, ...attrs })];
+    const errorBox = h('p', { class: 'notice', role: 'alert', hidden: !M.auth.notice }, M.auth.notice || '');
+    const showError = (text) => { errorBox.textContent = text; errorBox.hidden = false; };
 
-    const signIn = (e) => {
+    const submit = async (e) => {
       e.preventDefault();
-      M.safe(() => {
-        M.act.signIn({ name: nameIn.value, email: emailIn.value });
-        M.afterLogin();
-      });
+      const form = e.currentTarget;
+      const value = (id) => form.querySelector('#' + id).value;
+      const button = form.querySelector('button[type=submit]');
+      if (creating && value('signup-password') !== value('signup-confirm')) return showError('Passwords do not match.');
+      button.disabled = true;
+      try {
+        if (creating) await M.auth.signup(value('signup-name'), value('signup-username'), value('signup-password'));
+        else await M.auth.login(value('login-username'), value('login-password'));
+        form.reset();
+        await M.afterLogin();
+      } catch (err) {
+        showError(err.message);
+        button.disabled = false;
+      }
     };
+    const switchTo = (next) => { M.ui.loginMode = next; M.auth.notice = ''; M.render(); };
+
+    const form = creating
+      ? h('form', { class: 'stack', onSubmit: submit },
+          ...field('signup-name', 'Display name', { autocomplete: 'name', maxlength: 60, placeholder: 'Maya Chen' }),
+          ...field('signup-username', 'Username', { autocomplete: 'username', minlength: 3, maxlength: 32, pattern: '[A-Za-z0-9_]{3,32}', title: '3–32 letters, numbers or underscores', placeholder: 'maya_chen', autocapitalize: 'none', spellcheck: 'false' }),
+          ...field('signup-password', 'Password', { type: 'password', autocomplete: 'new-password', minlength: 8, maxlength: 128 }),
+          h('p', { class: 'hint small' }, 'At least 8 characters. A short phrase works great.'),
+          ...field('signup-confirm', 'Confirm password', { type: 'password', autocomplete: 'new-password', minlength: 8, maxlength: 128 }),
+          h('button', { class: 'btn primary lg', type: 'submit' }, 'Create account'))
+      : h('form', { class: 'stack', onSubmit: submit },
+          ...field('login-username', 'Username', { autocomplete: 'username', maxlength: 32, autocapitalize: 'none', spellcheck: 'false' }),
+          ...field('login-password', 'Password', { type: 'password', autocomplete: 'current-password', maxlength: 128 }),
+          h('button', { class: 'btn primary lg', type: 'submit' }, 'Sign in'));
 
     return h(
       'div',
@@ -84,37 +119,21 @@
       h(
         'div',
         { class: 'login-card glass' },
-        h('div', { class: 'login-chrome' }, M.icon('folder', 20), 'meadow / welcome'),
-        h('h2', null, 'Come on in.'),
-        h('p', { class: 'hint' }, 'Your people are just a little closer.'),
+        h('div', { class: 'login-chrome' }, M.icon('folder', 20), creating ? 'meadow / new account' : 'meadow / welcome'),
+        h('h2', null, creating ? 'Make yourself at home.' : 'Come on in.'),
+        h('p', { class: 'hint' }, creating ? 'Pick a username your friends will recognize.' : 'Your people are just a little closer.'),
         pending ? h('p', { class: 'notice' }, `You've been invited to an org (code ${pending}). Sign in to join!`) : null,
+        errorBox,
         M.google.configured()
-          ? googleSlot
-          : h('p', { class: 'hint' }, 'Choose a name to explore this local demo.'),
-        h('form', { class: 'stack', onSubmit: signIn },
-          h('label', { for: 'login-name' }, 'Name'), nameIn,
-          h('label', { for: 'login-email' }, 'School email'), emailIn,
-          h('button', { class: 'btn primary lg', type: 'submit' }, 'Sign in')),
-        profiles.length
-          ? h('div', { class: 'profiles' },
-              h('h3', null, 'Welcome back'),
-              h('div', { class: 'profile-list' },
-                profiles.slice(0, 8).map((u) =>
-                  h('button', { class: 'profile', onClick: () => { M.session.set(u.id); M.store.update((s) => (s.users[u.id].lastSeen = Date.now()), { silent: true }); M.afterLogin(); } },
-                    M.avatar(u, 28), h('span', null, u.name)))))
+          ? h('div', { class: 'google-slot' },
+              V.googleButton(creating ? 'Sign up with Google' : 'Sign in with Google', M.google.signIn),
+              h('p', { class: 'hint small' }, 'Google will also ask to share your calendar’s free/busy times with Meadow. Event titles and details are never read.'))
           : null,
-        h('div', { class: 'divider' }, h('span', null, 'or')),
-        h('button', {
-          class: 'btn glossy-green lg',
-          onClick: () => {
-            const { orgId, ids } = M.act.seedDemo();
-            M.session.set(ids['Maya Chen']);
-            M.store.update((s) => (s.users[ids['Maya Chen']].lastSeen = Date.now()), { silent: true });
-            location.hash = '#/o/' + orgId + '/chat';
-            M.afterLogin();
-          },
-        }, M.icon('leaf'), 'Launch the demo org'),
-        h('p', { class: 'hint' }, 'Take a look around Sunrise Service Society. Eight friendly faces, shared calendars, and plans in the making.')
+        M.google.configured() ? h('div', { class: 'divider' }, h('span', null, 'or use a username')) : null,
+        form,
+        h('p', { class: 'hint switch-mode' },
+          creating ? 'Already have an account? ' : 'New to Meadow? ',
+          h('button', { type: 'button', class: 'link-btn', onClick: () => switchTo(creating ? 'signin' : 'signup') }, creating ? 'Sign in' : 'Create an account'))
       )
     );
   };
@@ -128,7 +147,7 @@
       h('span', { class: 'tagline-sm' }, org ? `${org.emoji} ${org.name}` : TAGLINE),
       h('div', { class: 'spacer' }),
       h('a', { class: 'btn small', href: '#/me', 'aria-label': 'My profile and calendar' }, M.avatar(me, 22), h('span', null, me.name)),
-      h('button', { class: 'btn small', onClick: () => { M.act.signOut(); location.hash = '#/'; M.render(); } }, 'Sign out')
+      h('button', { class: 'btn small', onClick: () => M.act.signOut() }, 'Sign out')
     );
   };
 

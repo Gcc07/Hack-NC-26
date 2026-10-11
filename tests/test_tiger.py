@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from backend import create_app
+from conftest import signed_in
 from backend.tiger_repository import TigerUnavailable, busy_slots, split_sql
 from backend.tiger_search import memory_documents
 
@@ -82,7 +83,7 @@ def _seed(client):
 
 @pytest.fixture
 def client():
-    return create_app({"TESTING": True}).test_client()
+    return signed_in(create_app({"TESTING": True}))
 
 
 def test_org_insights_and_memory_search(client):
@@ -125,16 +126,19 @@ def test_tiger_setup_commands_wait_for_configuration():
 def test_unit_tests_do_not_open_a_developer_tiger_database(monkeypatch):
     monkeypatch.setenv("STORAGE_BACKEND", "tiger")
     monkeypatch.setenv("TIMESCALE_SERVICE_URL", "postgresql://user:secret@example.test/meadow")
-    client = create_app({"TESTING": True}).test_client()
+    client = signed_in(create_app({"TESTING": True}))
     assert client.post("/api/users", json={"name": "Maya"}).status_code == 201
 
 
 def test_tiger_failures_do_not_leak_credentials():
     class Boom:
+        def create(self, resource, data):
+            return {**data, "id": "u1"}
+
         def snapshot(self):
             raise TigerUnavailable("Tiger schema is not initialized. Run flask --app app tiger-init.", detail="postgresql://user:secret@db.example/meadow")
 
-    client = create_app({"TESTING": True}, repository=Boom()).test_client()
+    client = signed_in(create_app({"TESTING": True}, repository=Boom()))
     response = client.get("/api/state")
     assert response.status_code == 503
     assert response.json["error"]["code"] == "storage_unavailable"

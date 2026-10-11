@@ -9,36 +9,8 @@
   const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
 
   /* ------------------------------------------------------------------ users / auth */
-  A.signIn = function ({ name, email, photo, google }) {
-    name = cap(name, 60);
-    email = cap(email, 120).toLowerCase();
-    if (!name) throw new Error('Please enter your name.');
-    const id = M.store.update((s) => {
-      let user = email && Object.values(s.users).find((u) => u.email === email);
-      if (!user) {
-        const nn = normName(name);
-        user = Object.values(s.users).find((u) => u.placeholder && normName(u.name) === nn);
-      }
-      if (user && user.placeholder) {
-        // A roster entry becomes a real account (merge, keep memberships).
-        user.placeholder = false;
-        user.name = name;
-        if (email) user.email = email;
-      }
-      if (!user) {
-        user = { id: M.uid('u'), name, email, createdAt: Date.now(), busy: [], statusBusy: [], calendar: null, bridgeOptIn: {}, presence: 'online', away: '' };
-        s.users[user.id] = user;
-      }
-      if (photo) user.photo = photo;
-      if (google) user.google = true;
-      user.lastSeen = Date.now();
-      return user.id;
-    });
-    M.session.set(id);
-    return id;
-  };
-
-  A.signOut = () => M.session.set(null);
+  /* Sign-up, login and Google sign-in happen on the server (M.auth); profiles are created there. */
+  A.signOut = () => M.auth.logout();
 
   A.heartbeat = function () {
     const me = M.session.get();
@@ -75,7 +47,7 @@
       });
       s.friendships = s.friendships.filter((f) => f.a !== uid && f.b !== uid);
     });
-    M.session.set(null);
+    return M.store.flush().then(() => M.auth.deleteAccount());
   };
 
   /* ------------------------------------------------------------------ calendar / privacy */

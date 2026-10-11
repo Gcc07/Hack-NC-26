@@ -23,6 +23,40 @@ For just the app, install `requirements.txt`; the dev file also installs pytest.
 - `GET http://127.0.0.1:5000/api/health` returns `{"status":"ok"}`.
 - Run tests with `python -m pytest -q` from the repository root.
 
+## Accounts and sign-in
+
+Every `/api` endpoint except `/api`, `/api/health` and the sign-in endpoints below
+requires a session. Sessions are 256-bit random tokens in an `HttpOnly`,
+`SameSite=Lax` cookie (`Secure` over HTTPS); only their SHA-256 hash is stored.
+A session expires **3 hours after login** and logout revokes it on the server.
+State-changing requests from another origin are refused (403).
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/api/auth/config` | `{google}`: whether Google sign-in is configured |
+| POST | `/api/auth/signup` | `{name, username, password}` → new account and session (201); 409 if the username is taken |
+| POST | `/api/auth/login` | `{username, password}` → session; never creates an account |
+| POST | `/api/auth/logout` | Revokes the session |
+| GET | `/api/auth/me` | `{account: {userId, username, provider, googleCalendar, expiresAt, ...}}` |
+| DELETE | `/api/auth/account` | Deletes the account and its sessions |
+| GET | `/api/auth/google/start` | Redirects to Google (`?link=1` attaches Google to the signed-in account) |
+| GET | `/api/auth/google/callback` | Google's redirect target |
+| POST | `/api/auth/google/calendar/sync` | Re-imports Google free/busy with the stored refresh token |
+| POST | `/api/auth/google/calendar/disconnect` | Revokes Meadow's Google access |
+
+Usernames are 3–32 letters, digits or underscores and unique ignoring case.
+Passwords are 8–128 characters, not the username or a very common password, and
+are stored as scrypt hashes. Failed logins are throttled per username (8 per 15
+minutes) and per IP; sign-ups per IP. Errors never reveal whether a username exists.
+
+Google sign-in uses the OAuth 2.0 authorization code flow with PKCE, `state` and
+`nonce`, entirely on the server. The single consent screen asks for
+`openid email profile` and `calendar.freebusy`; at sign-in Meadow imports the next
+60 days of busy times (no titles or details). The refresh token is encrypted with
+a key derived from `MEADOW_SECRET_KEY`. See `.env.example` for setup. Accounts and
+sessions live in the `meadow_accounts` and `meadow_sessions` Tiger tables
+(`backend/sql/002_auth.sql`, created by `tiger-init`) or in memory.
+
 ## Resources
 
 ### Frontend synchronization
@@ -117,16 +151,16 @@ All records disappear on restart, including a development reloader restart.
 Use one process: separate workers have separate stores. Tests create fresh apps
 and use Flask's [test client](https://flask.palletsprojects.com/en/stable/testing/).
 
-This is an unauthenticated development API. IDs linking records are stored as
-references, but referential integrity and cascading deletes are not implemented.
-Profile selection remains the demo's identity mechanism, not authentication.
+Requests are authenticated, but not yet authorized per record: any signed-in
+member can read and change shared data through `/api/state` and the CRUD
+endpoints. IDs linking records are stored as references, but referential
+integrity and cascading deletes are not implemented.
 Org permissions, role-claim rules, event status recalculation, scheduling, and
 integrations still run in the frontend. Snapshot writes are atomic and reject
 concurrent stale changes, but the server does not enforce those business rules.
 Snapshot validation checks collection/ID structure; individual CRUD endpoints
 apply the stricter schemas in `models.py`. All data is visible to connected demo
-clients. Keep the API local until authentication and server-side business actions
-are added.
+members. Per-record authorization needs server-side business actions.
 
 For an optional real-browser smoke test:
 

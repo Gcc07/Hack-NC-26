@@ -219,7 +219,17 @@
           // No built-in interactivity: tsParticles' repulse snaps bubbles on contact. We ease them away ourselves (below).
         },
       });
-      if (!fx.visual) { c && c.destroy(); } else { bubbles = c; dodge.last = 0; dodge.raf = requestAnimationFrame(dodgeLoop); }
+      if (!fx.visual) { c && c.destroy(); }
+      else {
+        bubbles = c;
+        dodge.last = 0;
+        dodge.raf = requestAnimationFrame(dodgeLoop);
+        // Keep bubbles out of text right after tsParticles moves them and before it draws (same frame, no lag).
+        // This runs after the cursor dodge too, so dodging can never push a bubble onto text.
+        const ps = c.particles, update = ps && ps.update;
+        if (typeof update === 'function') ps.update = function () { const out = update.apply(this, arguments); guardBubbles(); return out; };
+        guardBubbles(); // the spawn positions are random; fix them before anyone sees them
+      }
     } catch (e) { warn('bubbles', e); } finally { bubblesLoading = false; }
   }
   function stopBubbles() {
@@ -325,6 +335,7 @@
     orbs.camera.position.x = m.x * 0.5;
     orbs.camera.position.y = m.y * 0.3;
     orbs.camera.lookAt(0, 0, 0);
+    orbs.camera.updateMatrixWorld(); // guardOrb projects with this frame's camera
     // Low-pass filtered cursor (world space, z = 0 plane): fast flicks of the mouse can't cause a sudden shove.
     if (m.seen) { m.cx += (m.nx - m.cx) * Math.min(1, dt * 8); m.cy += (m.ny - m.cy) * Math.min(1, dt * 8); }
     const cx = m.cx * orbs.halfW, cy = m.cy * orbs.halfH;
@@ -347,6 +358,7 @@
         o.x += (o.vx + Math.sin(performance.now() / 1700 + o.phase) * 0.12) * dt;
         o.y += (o.vy + o.rise) * dt;
         if (o.y - o.r > orbs.halfH + 0.5) respawn(o, false);
+        else guardOrb(o);
       }
       const s = o.r * (o.pop >= 0 ? 1 + o.pop * 0.35 : 1);
       o.mesh.position.set(o.x, o.y, o.z);
@@ -396,6 +408,191 @@
     return false;
   }
 
+  /* ================================================================== text keep-out zones
+     Every visible piece of readable text (plus inputs) gets a box padded by TEXT_PAD px. Neither bubble layer is
+     allowed to overlap a box: a bubble touching one is held at its edge and slid sideways around it; one that is
+     deep inside (text appeared on top of it) or boxed in by a full-width zone is quietly respawned below the screen.
+     Zones are recomputed at most every ZONE_MS while the page changes, and once a second regardless (animations). */
+  const TEXT_PAD = 40, ZONE_MS = 200, SLIDE_PX = 3, DEEP_PX = 24;
+  const ZONE_SKIP = 'script, style, noscript, template, [aria-hidden="true"]';
+  const zones = { list: [], dirty: true, last: 0, running: false, raf: 0, overlay: null };
+
+  function collectZones() {
+    const W = window.innerWidth, H = window.innerHeight;
+    const view = { l: 0, t: 0, r: W, b: H };
+    const clips = new Map(); // element -> visible region after every overflow-clipping ancestor
+    const clipOf = (el) => {
+      if (!el || el === document.body || el === document.documentElement) return view;
+      if (clips.has(el)) return clips.get(el);
+      let c = clipOf(el.parentElement);
+      const cs = getComputedStyle(el);
+      if (cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
+        const b = el.getBoundingClientRect();
+        c = { l: Math.max(c.l, b.left), t: Math.max(c.t, b.top), r: Math.min(c.r, b.right), b: Math.min(c.b, b.bottom) };
+      }
+      clips.set(el, c);
+      return c;
+    };
+    const visible = (el) => !el.closest(ZONE_SKIP) && (!el.checkVisibility || el.checkVisibility({ visibilityProperty: true }));
+    const out = [];
+    const add = (b, el) => {
+      if (b.width < 2 || b.height < 2) return; // .sr-only text is 1px
+      const c = clipOf(el);
+      const l = Math.max(b.left, c.l), t = Math.max(b.top, c.t), r = Math.min(b.right, c.r), bt = Math.min(b.bottom, c.b);
+      if (r - l < 1 || bt - t < 1) return; // scrolled out of its panel or off screen
+      out.push({ l: l - TEXT_PAD, t: t - TEXT_PAD, r: r + TEXT_PAD, b: bt + TEXT_PAD });
+    };
+    const range = document.createRange();
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (/\S/.test(n.data) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+    });
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const el = n.parentElement;
+      if (!el || !visible(el)) continue;
+      range.selectNodeContents(n);
+      for (const b of range.getClientRects()) add(b, el);
+    }
+    for (const el of document.querySelectorAll('input:not([type=hidden]):not([type=checkbox]):not([type=radio]), textarea, select')) {
+      if (visible(el)) add(el.getBoundingClientRect(), el);
+    }
+    // Drop boxes that sit entirely inside another box (lines of one paragraph mostly collapse into each other).
+    out.sort((a, b) => (b.r - b.l) * (b.b - b.t) - (a.r - a.l) * (a.b - a.t));
+    const kept = [];
+    for (const z of out) if (!kept.some((k) => z.l >= k.l && z.t >= k.t && z.r <= k.r && z.b <= k.b)) kept.push(z);
+    return kept;
+  }
+
+  function refreshZones(now) {
+    if (!(zones.dirty && now - zones.last > ZONE_MS) && now - zones.last < 1000) return;
+    zones.list = collectZones();
+    zones.dirty = false;
+    zones.last = now;
+    if (zones.overlay) drawZones();
+  }
+
+  /** Keep a circle (screen px) out of every zone. Returns null when it is clear, or {x, y} / {respawn: true}. */
+  function keepOut(x, y, r) {
+    const W = window.innerWidth;
+    let moved = false;
+    for (let pass = 0; pass < 3; pass++) {
+      let hit = false;
+      for (const z of zones.list) {
+        const nx = Math.min(Math.max(x, z.l), z.r) - x, ny = Math.min(Math.max(y, z.t), z.b) - y;
+        if (nx * nx + ny * ny >= r * r) continue;
+        hit = moved = true;
+        const left = x + r - z.l, right = z.r - (x - r), up = y + r - z.t, down = z.b - (y - r);
+        const depth = Math.min(left, right, up, down);
+        if (depth > DEEP_PX) return { respawn: true };
+        if (depth === left) x -= left;
+        else if (depth === right) x += right;
+        else {
+          y += depth === up ? -up : down;
+          // Held at the top/bottom edge: slide toward whichever side exit is closer and still on screen.
+          const canL = z.l - r >= 0, canR = z.r + r <= W;
+          if (!canL && !canR) return { respawn: true };
+          const goLeft = canL && (!canR || left < right);
+          x += goLeft ? -Math.min(SLIDE_PX, left) : Math.min(SLIDE_PX, right);
+        }
+      }
+      if (!hit) break;
+    }
+    return moved ? { x, y } : null;
+  }
+
+  /** A spot just below the screen whose rising path starts outside every zone. */
+  function freeX(r, y) {
+    const W = window.innerWidth;
+    for (let i = 0; i < 12; i++) {
+      const x = r + Math.random() * Math.max(1, W - 2 * r);
+      if (!zones.list.some((z) => x + r > z.l && x - r < z.r && y + r > z.t && y - r < z.b)) return x;
+    }
+    return Math.random() * W;
+  }
+
+  function guardBubbles() {
+    if (!bubbles || !bubbles.particles) return;
+    const k = (bubbles.retina && bubbles.retina.pixelRatio) || 1; // particle coordinates are canvas pixels
+    const H = window.innerHeight;
+    for (const p of bubbles.particles.filter(() => true)) {
+      if (p.destroyed || !p.position) continue;
+      const r = p.getRadius() / k;
+      const res = keepOut(p.position.x / k, p.position.y / k, r);
+      if (!res) continue;
+      if (res.respawn) {
+        p.position.x = freeX(r, H + r) * k;
+        p.position.y = (H + r - 1) * k;
+      } else {
+        p.position.x = res.x * k;
+        p.position.y = res.y * k;
+      }
+    }
+  }
+
+  const orbTmp = window.THREE ? new THREE.Vector3() : null;
+  function guardOrb(o) {
+    if (!orbTmp || !zones.list.length) return;
+    const W = window.innerWidth, H = window.innerHeight, cam = orbs.camera;
+    const dist = cam.position.distanceTo(orbTmp.set(o.x, o.y, o.z));
+    const ppu = H / 2 / (dist * Math.tan((cam.fov * Math.PI) / 360)); // screen px per world unit at the orb's depth
+    orbTmp.set(o.x, o.y, o.z).project(cam);
+    const sx = ((orbTmp.x + 1) / 2) * W, sy = ((1 - orbTmp.y) / 2) * H;
+    const res = keepOut(sx, sy, o.r * ppu * 1.08); // + the rim wobble in the vertex shader
+    if (!res) return;
+    if (res.respawn) {
+      respawn(o, false);
+      return;
+    }
+    o.x += (res.x - sx) / ppu;
+    o.y -= (res.y - sy) / ppu;
+    o.vx *= 0.5; o.vy = Math.min(o.vy, 0);
+  }
+
+  function loopZones(now) {
+    if (!zones.running) return;
+    zones.raf = requestAnimationFrame(loopZones);
+    if (document.hidden) return;
+    refreshZones(now);
+  }
+  function startZones() {
+    if (zones.running) return;
+    zones.running = true;
+    zones.dirty = true;
+    refreshZones(performance.now()); // zones exist before the first bubble frame is drawn
+    zones.raf = requestAnimationFrame(loopZones);
+  }
+  function stopZones() {
+    zones.running = false;
+    cancelAnimationFrame(zones.raf);
+  }
+  const markZones = () => { zones.dirty = true; };
+  // Attributes too: entrance animations fade text in through inline styles, and that text counts while it is still faint.
+  new MutationObserver(markZones).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
+  window.addEventListener('resize', markZones);
+  document.addEventListener('scroll', markZones, { capture: true, passive: true });
+
+  // Debugging aid: Meadow.fx.showZones(true) outlines every keep-out box.
+  function drawZones() {
+    const c = zones.overlay, W = window.innerWidth, H = window.innerHeight;
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+    const g = c.getContext('2d');
+    g.clearRect(0, 0, W, H);
+    g.strokeStyle = 'rgba(255, 60, 120, 0.85)';
+    g.fillStyle = 'rgba(255, 60, 120, 0.08)';
+    for (const z of zones.list) { g.fillRect(z.l, z.t, z.r - z.l, z.b - z.t); g.strokeRect(z.l + 0.5, z.t + 0.5, z.r - z.l - 1, z.b - z.t - 1); }
+  }
+  fx.showZones = (on) => {
+    if (on && !zones.overlay) {
+      zones.overlay = document.createElement('canvas');
+      zones.overlay.setAttribute('aria-hidden', 'true');
+      zones.overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;pointer-events:none';
+      document.body.append(zones.overlay);
+      drawZones();
+    } else if (!on && zones.overlay) {
+      zones.overlay.remove();
+      zones.overlay = null;
+    }
+  };
+
   /* ================================================================== visual on/off */
   function applyVisual() {
     document.documentElement.classList.toggle('fx-off', !fx.visual);
@@ -403,8 +600,8 @@
     if (b) { b.setAttribute('aria-pressed', String(fx.visual)); b.classList.toggle('off', !fx.visual); }
     if (fx.visual) {
       startSky(); // frozen (speed 0) under reduced motion
-      if (!reduced) { startBubbles(); startOrbs(); } // the moving layers stay off for people who asked for less motion
-    } else { stopSky(); stopBubbles(); stopOrbs(); }
+      if (!reduced) { startZones(); startBubbles(); startOrbs(); } // the moving layers stay off for people who asked for less motion
+    } else { stopSky(); stopBubbles(); stopOrbs(); stopZones(); }
   }
   function applySound() {
     const b = $('#fx-toggle-sound');
