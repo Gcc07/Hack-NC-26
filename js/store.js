@@ -17,6 +17,11 @@
   let error = '';
   let pending = false;
   let pollTimer = null;
+  // Edits not yet confirmed saved, in order. If someone else saves first (409), we re-apply
+  // these on top of the latest server state instead of throwing the user's change away.
+  let queue = [];
+  let conflicts = 0;
+  const MAX_REBASES = 6;
 
   function serverState(state) {
     const out = {};
@@ -103,10 +108,36 @@
     }
   }
 
+  /* Someone else saved first. Re-apply our unsaved edits on top of the latest server state so the
+     user's action is not lost. Returns false (caller falls back to reloading) if the server was
+     reset or restarted, or if we keep colliding. */
+  async function rebase() {
+    if (conflicts >= MAX_REBASES) return false;
+    let data;
+    try { data = await request(); } catch { return false; }
+    if (data.instance !== instance) return false; // reset/restart: never resurrect old data
+    let state = mergeClientOnly(cache, structuredClone(data.state));
+    for (const fn of queue) {
+      try {
+        const draft = structuredClone(state);
+        fn(draft);
+        state = draft;
+      } catch { /* this edit no longer applies to the newer data; skip it */ }
+    }
+    cache = state;
+    revision = data.revision;
+    instance = data.instance;
+    conflicts++;
+    dirty = true;
+    edits++;
+    return true;
+  }
+
   async function save() {
     if (saving || !dirty || !loaded) return;
     saving = true;
     const sentEdits = edits;
+    const sentCount = queue.length;
     status();
     try {
       const data = await request({ method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -114,6 +145,8 @@
       revision = data.revision;
       instance = data.instance;
       error = '';
+      conflicts = 0;
+      queue.splice(0, sentCount);
       if (sentEdits === edits) {
         dirty = false;
         accept(data);
@@ -122,9 +155,14 @@
     } catch (e) {
       if (e.status === 401) {
         dirty = false;
+        queue = [];
+      } else if (e.status === 409 && await rebase()) {
+        error = ''; // our edits were re-applied on the latest data; the finally block saves them again
       } else if (e.status === 409) {
         // Do not overwrite another browser's changes or resurrect data after restart.
         dirty = false;
+        queue = [];
+        conflicts = 0;
         loaded = false;
         cache = empty();
         error = 'Another tab changed the data. Reloading; please repeat your last action.';
@@ -152,6 +190,8 @@
     clear() {
       clearTimeout(timer);
       cache = empty();
+      queue = [];
+      conflicts = 0;
       loaded = dirty = false;
       edits++;
       error = '';
@@ -164,6 +204,7 @@
       const next = structuredClone(cache);
       const result = fn(next);
       cache = next;
+      queue.push(fn);
       dirty = true;
       edits++;
       clearTimeout(timer);
