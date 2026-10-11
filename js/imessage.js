@@ -31,7 +31,23 @@
     if (!I.up()) throw new Error('The iMessage bridge is offline. Start it with: cd meadow && npm start');
   };
   const say = (channel, text, payload) => M.store.update((s) => M.act._say(s, channel, text, payload));
-  const skippedNote = (n) => (n ? ` ${M.plural(n, 'person', 'people')} haven't turned on iMessage under Me, so they weren't texted.` : '');
+  const skippedNote = (n, errors) => {
+    if (!n) return '';
+    const photon = (errors || []).some((e) => /not allowed|Target not allowed|allowlist/i.test(e.error || ''));
+    if (photon) {
+      return ` ${M.plural(n, 'person', 'people')} failed — Photon rejected the number (add them as project users, matching +1…).`;
+    }
+    return ` ${M.plural(n, 'person', 'people')} weren’t reached (missing phone on bridge, or send failed — check meadow logs).`;
+  };
+  /** Attach phone/name from the app store so the bridge can text people it hasn’t seen yet. */
+  const packRecipients = (state, list) =>
+    list.map((t) => {
+      const id = typeof t === 'string' ? t : t.userId;
+      const u = state.users[id];
+      const row = { userId: id, phone: (u && u.phone) || '', name: (u && u.name) || '' };
+      if (t && typeof t === 'object' && Array.isArray(t.roleNames)) row.roleNames = t.roleNames;
+      return row;
+    });
 
   /* ------------------------------------------------------------------ member opt-in */
   I.savePhone = async function (uid, phone, optIn) {
@@ -108,7 +124,7 @@
     const now = opts.now !== false && (!sendAt || sendAt <= Date.now() + 2000);
     const body = {
       event: eventInfo(ev),
-      recipients: targets,
+      recipients: packRecipients(state, targets),
       now: !!now,
       askRsvp: opts.askRsvp !== false,
     };
@@ -141,7 +157,7 @@
     say(
       'event:' + ev.id,
       `📱 ${M.plural(res.scheduled ? targets.length : res.reached, 'person', 'people')}${roleBit} ${what} by iMessage.` +
-        skippedNote(res.skipped.length) +
+        skippedNote((res.skipped || []).length, res.errors) +
         (opts.askRsvp === false ? '' : ' Replies (in / running late / can’t make it) show up here.')
     );
     return res;
@@ -155,7 +171,12 @@
     if (!reach.length) throw new Error('Nobody who went to this event has turned on iMessage yet.');
     const surveyId = 'sv_' + ev.id;
     const sendAt = ev.end > Date.now() ? ev.end + 30 * M.MIN : Date.now();
-    const res = await api('/surveys', { surveyId, event: eventInfo(ev), recipients: reach.map((userId) => ({ userId })), sendAt });
+    const res = await api('/surveys', {
+      surveyId,
+      event: eventInfo(ev),
+      recipients: packRecipients(state, reach),
+      sendAt,
+    });
     M.store.update((s) => {
       const prev = s.surveys[surveyId];
       s.surveys[surveyId] = { id: surveyId, eventId: ev.id, orgId: ev.orgId, sentTo: [...new Set([...(prev ? prev.sentTo : []), ...reach])], sendAt, responses: prev ? prev.responses : {} };
@@ -193,14 +214,14 @@
     if (!reach.length) throw new Error('Nobody in that group has iMessage turned on under Me.');
     const res = await api('/broadcast', {
       event: eventInfo(ev),
-      recipients: reach.map((userId) => ({ userId })),
+      recipients: packRecipients(state, reach),
       text,
     });
-    const skipped = ids.length - reach.length;
+    const skipped = Math.max(0, ids.length - reach.length) + (res.skipped || []).length;
     say(
       'event:' + ev.id,
       `📱 Officer texted ${M.plural(res.reached, 'person', 'people')}: “${text.slice(0, 120)}${text.length > 120 ? '…' : ''}”` +
-        skippedNote(Math.max(0, skipped))
+        skippedNote(skipped, res.errors)
     );
     return res;
   };
@@ -215,10 +236,16 @@
     if (!reach.length) throw new Error('Nobody in this org has turned on iMessage yet.');
     const pollId = M.uid('p');
     title = String(title || 'our next event').slice(0, 80);
-    const res = await api('/availability', { pollId, orgId: org.id, title, options, recipients: reach.map((userId) => ({ userId })) });
+    const res = await api('/availability', {
+      pollId,
+      orgId: org.id,
+      title,
+      options,
+      recipients: packRecipients(state, reach),
+    });
     M.store.update((s) => {
       s.polls[pollId] = { id: pollId, orgId: org.id, title, options, sentTo: reach, responses: {}, createdBy: actorId, createdAt: Date.now() };
-      M.act._say(s, 'org:' + org.id, `📱 I texted ${M.plural(res.reached, 'member')} asking which times work for **${title}**. Replies tally here live.` + skippedNote(res.skipped.length), { type: 'poll', pollId });
+      M.act._say(s, 'org:' + org.id, `📱 I texted ${M.plural(res.reached, 'member')} asking which times work for **${title}**. Replies tally here live.` + skippedNote((res.skipped || []).length, res.errors), { type: 'poll', pollId });
     });
     return res;
   };
@@ -236,8 +263,19 @@
     const ev = S().events[eventId];
     const reminded = (ev.imessage && ev.imessage.reminded) || [];
     if (!I.up() || !reminded.length) return;
-    api('/broadcast', { event: eventInfo(ev), cancelled: true, recipients: reminded.map((userId) => ({ userId })), text: `🚫 ${ev.title} (${M.fmt.day(ev.start)}, ${M.fmt.time(ev.start)}) has been cancelled. Sorry for the change!` })
-      .then((r) => say('event:' + ev.id, `📱 Texted the cancellation to ${M.plural(r.reached, 'person', 'people')}.`))
+    api('/broadcast', {
+      event: eventInfo(ev),
+      cancelled: true,
+      recipients: packRecipients(S(), reminded),
+      text: `🚫 ${ev.title} (${M.fmt.day(ev.start)}, ${M.fmt.time(ev.start)}) has been cancelled. Sorry for the change!`,
+    })
+      .then((r) =>
+        say(
+          'event:' + ev.id,
+          `📱 Texted the cancellation to ${M.plural(r.reached, 'person', 'people')}.` +
+            skippedNote((r.skipped || []).length, r.errors)
+        )
+      )
       .catch((e) => M.toast(e.message));
   };
 

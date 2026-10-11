@@ -63,6 +63,18 @@ type ReminderJob = {
   timer: ReturnType<typeof setTimeout>;
 };
 
+type RecipientIn = {
+  userId: string;
+  phone?: string;
+  name?: string;
+  roleNames?: string[];
+};
+
+function errMsg(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return String(error || "send failed");
+}
+
 /**
  * HTTP surface expected by js/imessage.js.
  * Runs alongside the Spectrum loop in the same meadow process.
@@ -70,6 +82,25 @@ type ReminderJob = {
 export function startBridgeServer(opts: BridgeOptions): http.Server {
   const { repo, port, mode, sendText, composeSms } = opts;
   const scheduled: ReminderJob[] = [];
+
+  /** Prefer phone from the browser payload; register it on the bridge so replies work. */
+  const resolvePhone = async (
+    recipient: RecipientIn,
+    orgId?: string
+  ): Promise<{ phone: string } | { reason: string }> => {
+    const state = await repo.load();
+    const member = state.members[recipient.userId];
+    const raw = (recipient.phone || member?.phone || "").trim();
+    if (!raw) return { reason: "no_phone_on_bridge" };
+    const saved = await repo.upsertContact({
+      userId: recipient.userId,
+      name: recipient.name || member?.name || recipient.userId,
+      phone: raw,
+      orgIds: orgId ? [orgId] : member?.orgId ? [member.orgId] : [],
+    });
+    if (!saved.ok || !saved.phone) return { reason: "contact_save_failed" };
+    return { phone: saved.phone };
+  };
 
   const runReminderSend = async (input: {
     event: {
@@ -79,15 +110,19 @@ export function startBridgeServer(opts: BridgeOptions): http.Server {
       start?: number;
       location?: string;
     };
-    recipients: Array<{ userId: string; roleNames?: string[] }>;
+    recipients: RecipientIn[];
     text?: string;
     askRsvp?: boolean;
-  }): Promise<{ reached: number; skipped: string[] }> => {
+  }): Promise<{
+    reached: number;
+    skipped: string[];
+    errors: Array<{ userId: string; error: string }>;
+  }> => {
     const { event, recipients } = input;
     const askRsvp = input.askRsvp !== false;
-    const state = await repo.load();
     let reached = 0;
     const skipped: string[] = [];
+    const errors: Array<{ userId: string; error: string }> = [];
     const when = eventLabel(event);
     const fallback =
       `🌊 ${event.title || "Event"} reminder (${when}). ` +
@@ -107,9 +142,10 @@ export function startBridgeServer(opts: BridgeOptions): http.Server {
     if (!prompt) prompt = fallback;
 
     for (const recipient of recipients) {
-      const member = state.members[recipient.userId];
-      if (!member?.phone) {
+      const resolved = await resolvePhone(recipient, event.orgId);
+      if ("reason" in resolved) {
         skipped.push(recipient.userId);
+        errors.push({ userId: recipient.userId, error: resolved.reason });
         continue;
       }
       if (askRsvp) {
@@ -122,24 +158,32 @@ export function startBridgeServer(opts: BridgeOptions): http.Server {
         });
         if (!created.ok) {
           skipped.push(recipient.userId);
+          errors.push({ userId: recipient.userId, error: "pending_rsvp_failed" });
           continue;
         }
       }
 
       if (mode === "live" && sendText) {
         try {
-          await sendText(member.phone, prompt);
+          await sendText(resolved.phone, prompt);
           reached += 1;
         } catch (error) {
-          console.error("[meadow] reminder send failed", recipient.userId, error);
+          const msg = errMsg(error);
+          console.error(
+            "[meadow] reminder send failed",
+            recipient.userId,
+            resolved.phone,
+            msg
+          );
           skipped.push(recipient.userId);
+          errors.push({ userId: recipient.userId, error: msg });
         }
       } else {
-        console.log(`[meadow:dry] would text ${member.phone}: ${prompt}`);
+        console.log(`[meadow:dry] would text ${resolved.phone}: ${prompt}`);
         reached += 1;
       }
     }
-    return { reached, skipped };
+    return { reached, skipped, errors };
   };
 
   const server = http.createServer(async (req, res) => {
@@ -213,7 +257,7 @@ export function startBridgeServer(opts: BridgeOptions): http.Server {
             start?: number;
             location?: string;
           };
-          recipients?: Array<{ userId: string; roleNames?: string[] }>;
+          recipients?: RecipientIn[];
           now?: boolean;
           /** Custom SMS body; omit for standard Dewey RSVP copy. */
           text?: string;
@@ -294,7 +338,7 @@ export function startBridgeServer(opts: BridgeOptions): http.Server {
         const body = (await readJson(req)) as {
           surveyId?: string;
           event?: { id?: string; orgId?: string; title?: string };
-          recipients?: Array<{ userId: string }>;
+          recipients?: RecipientIn[];
         };
         const event = body.event;
         const recipients = body.recipients || [];
@@ -302,9 +346,9 @@ export function startBridgeServer(opts: BridgeOptions): http.Server {
           json(res, 400, { error: "event.id and event.orgId are required" });
           return;
         }
-        const state = await repo.load();
         let reached = 0;
         const skipped: string[] = [];
+        const errors: Array<{ userId: string; error: string }> = [];
         const fallback = `Food feedback for ${event.title || "the event"}: how was the food (or what should we order next time)?`;
         const prompt = composeSms
           ? await composeSms({
@@ -316,9 +360,10 @@ export function startBridgeServer(opts: BridgeOptions): http.Server {
           : fallback;
 
         for (const recipient of recipients) {
-          const member = state.members[recipient.userId];
-          if (!member?.phone) {
+          const resolved = await resolvePhone(recipient, event.orgId);
+          if ("reason" in resolved) {
             skipped.push(recipient.userId);
+            errors.push({ userId: recipient.userId, error: resolved.reason });
             continue;
           }
           const created = await repo.createPendingQuestion({
@@ -330,21 +375,25 @@ export function startBridgeServer(opts: BridgeOptions): http.Server {
           });
           if (!created.ok) {
             skipped.push(recipient.userId);
+            errors.push({ userId: recipient.userId, error: "pending_survey_failed" });
             continue;
           }
           if (mode === "live" && sendText) {
             try {
-              await sendText(member.phone, prompt);
+              await sendText(resolved.phone, prompt);
               reached += 1;
-            } catch {
+            } catch (error) {
+              const msg = errMsg(error);
+              console.error("[meadow] survey send failed", recipient.userId, resolved.phone, msg);
               skipped.push(recipient.userId);
+              errors.push({ userId: recipient.userId, error: msg });
             }
           } else {
-            console.log(`[meadow:dry] would text ${member.phone}: ${prompt}`);
+            console.log(`[meadow:dry] would text ${resolved.phone}: ${prompt}`);
             reached += 1;
           }
         }
-        json(res, 200, { reached, skipped, surveyId: body.surveyId });
+        json(res, 200, { reached, skipped, errors, surveyId: body.surveyId });
         return;
       }
 
@@ -354,7 +403,7 @@ export function startBridgeServer(opts: BridgeOptions): http.Server {
           orgId?: string;
           title?: string;
           options?: Array<{ label: string }>;
-          recipients?: Array<{ userId: string }>;
+          recipients?: RecipientIn[];
         };
         const options = (body.options || []).map((o) => o.label).filter(Boolean);
         const recipients = body.recipients || [];
@@ -362,9 +411,9 @@ export function startBridgeServer(opts: BridgeOptions): http.Server {
           json(res, 400, { error: "orgId and at least 2 options are required" });
           return;
         }
-        const state = await repo.load();
         let reached = 0;
         const skipped: string[] = [];
+        const errors: Array<{ userId: string; error: string }> = [];
         const fallback = `Which times work for ${body.title || "our next event"}? Reply with one of: ${options.join(" or ")}`;
         const prompt = composeSms
           ? await composeSms({
@@ -377,9 +426,10 @@ export function startBridgeServer(opts: BridgeOptions): http.Server {
           : fallback;
 
         for (const recipient of recipients) {
-          const member = state.members[recipient.userId];
-          if (!member?.phone) {
+          const resolved = await resolvePhone(recipient, body.orgId);
+          if ("reason" in resolved) {
             skipped.push(recipient.userId);
+            errors.push({ userId: recipient.userId, error: resolved.reason });
             continue;
           }
           const created = await repo.createPendingQuestion({
@@ -392,49 +442,66 @@ export function startBridgeServer(opts: BridgeOptions): http.Server {
           });
           if (!created.ok) {
             skipped.push(recipient.userId);
+            errors.push({ userId: recipient.userId, error: "pending_poll_failed" });
             continue;
           }
           if (mode === "live" && sendText) {
             try {
-              await sendText(member.phone, prompt);
+              await sendText(resolved.phone, prompt);
               reached += 1;
-            } catch {
+            } catch (error) {
+              const msg = errMsg(error);
+              console.error("[meadow] availability send failed", recipient.userId, resolved.phone, msg);
               skipped.push(recipient.userId);
+              errors.push({ userId: recipient.userId, error: msg });
             }
           } else {
-            console.log(`[meadow:dry] would text ${member.phone}: ${prompt}`);
+            console.log(`[meadow:dry] would text ${resolved.phone}: ${prompt}`);
             reached += 1;
           }
         }
-        json(res, 200, { reached, skipped, pollId: body.pollId });
+        json(res, 200, { reached, skipped, errors, pollId: body.pollId });
         return;
       }
 
       if (req.method === "POST" && url.pathname === "/broadcast") {
         const body = (await readJson(req)) as {
           text?: string;
-          recipients?: Array<{ userId: string }>;
+          event?: { orgId?: string };
+          recipients?: RecipientIn[];
         };
         const recipients = body.recipients || [];
         const text = body.text || "";
-        const state = await repo.load();
         let reached = 0;
+        const skipped: string[] = [];
+        const errors: Array<{ userId: string; error: string }> = [];
+        if (!text) {
+          json(res, 400, { error: "text is required" });
+          return;
+        }
         for (const recipient of recipients) {
-          const member = state.members[recipient.userId];
-          if (!member?.phone || !text) continue;
+          const resolved = await resolvePhone(recipient, body.event?.orgId);
+          if ("reason" in resolved) {
+            skipped.push(recipient.userId);
+            errors.push({ userId: recipient.userId, error: resolved.reason });
+            continue;
+          }
           if (mode === "live" && sendText) {
             try {
-              await sendText(member.phone, text);
+              await sendText(resolved.phone, text);
               reached += 1;
-            } catch {
-              /* skip */
+            } catch (error) {
+              const msg = errMsg(error);
+              console.error("[meadow] broadcast send failed", recipient.userId, resolved.phone, msg);
+              skipped.push(recipient.userId);
+              errors.push({ userId: recipient.userId, error: msg });
             }
           } else {
-            console.log(`[meadow:dry] broadcast to ${member.phone}: ${text}`);
+            console.log(`[meadow:dry] broadcast to ${resolved.phone}: ${text}`);
             reached += 1;
           }
         }
-        json(res, 200, { reached });
+        json(res, 200, { reached, skipped, errors });
         return;
       }
 
