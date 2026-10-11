@@ -184,7 +184,7 @@
     return img;
   };
 
-  /* Dewey, the assistant: a cropped close-up of the Meadow2 flowers + butterfly so it reads at avatar size. */
+  /* Dewey, the assistant: his flower portrait (Assets/dewey.png) in a round avatar; see .dewey in aero.css. */
   M.deweySvg = (size) => {
     const wrap = document.createElement('span');
     wrap.className = 'dewey';
