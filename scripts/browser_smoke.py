@@ -33,6 +33,7 @@ try:
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(url)
         page.get_by_role("button", name="Launch the demo org").click()
+        page.get_by_role("tab", name="Chat", exact=True).click()
         expect(page.get_by_role("textbox", name="Message", exact=True)).to_be_visible()
         page.evaluate("Meadow.store.flush()")
         org_id = page.evaluate("Object.keys(Meadow.store.get().orgs)[0]")

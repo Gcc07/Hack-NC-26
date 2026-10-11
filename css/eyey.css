@@ -1,0 +1,69 @@
+/* Eyey the flower: planted in the grass on the login screen. See js/eyey.js. */
+.eyey {
+  --w: 93px; /* 62x80 pixel art at 1.5x */
+  position: fixed; z-index: 5; width: var(--w); aspect-ratio: 62 / 80;
+  transform: translateX(-50%);
+  padding: 0; border: 0; background: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.eyey:focus-visible { outline: 3px solid #fff; outline-offset: 6px; border-radius: 14px; }
+html[data-view="app"] .eyey { display: none; }
+@media (max-width: 760px) { .eyey { display: none; } }
+
+/* The clip box ends at the ground line; the sprite sinks below it when he burrows. */
+.eyey-clip { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.eyey-sway { position: absolute; inset: 0; transform-origin: 50% 100%; animation: eyey-sway 4s ease-in-out infinite alternate; }
+.eyey-img { display: block; width: 100%; height: 100%; image-rendering: pixelated; user-select: none; -webkit-user-drag: none; filter: drop-shadow(0 2px 2px rgba(0, 50, 0, .35)); }
+@keyframes eyey-sway { from { transform: rotate(-2.5deg); } to { transform: rotate(2.5deg); } }
+
+/* Dirt mound he is planted in, and the dark hole that opens while he is moving. */
+.eyey-mound, .eyey-hole { position: absolute; left: 50%; pointer-events: none; border-radius: 50%; }
+/* dirt.png and hole.png are both 100x39. They sit behind the sprite, centred on the ground line,
+   so he stands in the dirt, or sinks into the dark middle of the hole. */
+.eyey-mound, .eyey-hole { --hw: 124px; bottom: -22px; z-index: -1; width: var(--hw); height: calc(var(--hw) * .39);
+  border-radius: 0; background-position: center; background-size: 100% 100%; background-repeat: no-repeat; image-rendering: pixelated; }
+.eyey-mound { transform: translateX(-50%); background-image: url("../Assets/dirt.png"); transition: opacity .15s ease; }
+.eyey-hole { opacity: 0; transform: translateX(-50%) scaleX(.2); background-image: url("../Assets/hole.png"); transition: opacity .2s ease, transform .25s ease; }
+.eyey.is-burrowing .eyey-mound, .eyey.is-hidden .eyey-mound, .eyey.is-rising .eyey-mound { opacity: 0; }
+.eyey.is-burrowing .eyey-hole, .eyey.is-hidden .eyey-hole, .eyey.is-rising .eyey-hole { opacity: 1; transform: translateX(-50%) scaleX(1); }
+
+/* Dive down, stay down, pop back up. */
+.eyey.is-burrowing .eyey-img { animation: eyey-dive .75s cubic-bezier(.5, 0, .8, .6) forwards; }
+.eyey.is-hidden .eyey-img { transform: translateY(104%); }
+.eyey.is-rising .eyey-img { animation: eyey-rise .8s cubic-bezier(.2, .8, .3, 1) both; }
+@keyframes eyey-dive {
+  0% { transform: translateY(0) scaleY(1); }
+  20% { transform: translateY(-9%) scaleY(1.06); }
+  100% { transform: translateY(104%) scaleY(.92); }
+}
+@keyframes eyey-rise {
+  0% { transform: translateY(104%) scaleY(.92); }
+  60% { transform: translateY(-9%) scaleY(1.07); }
+  80% { transform: translateY(2%) scaleY(.96); }
+  100% { transform: translateY(0) scaleY(1); }
+}
+
+/* Little bits of dirt that fly out when he goes down and comes up. */
+.eyey-puffs { position: absolute; left: 50%; bottom: 2px; width: 0; height: 0; pointer-events: none; }
+.eyey-puffs i { position: absolute; left: -3px; bottom: 0; width: 6px; height: 6px; background: #6b4c2c; border-radius: 1px; opacity: 0; }
+.eyey-puffs i:nth-child(1) { --dx: -34px; --dy: -22px; }
+.eyey-puffs i:nth-child(2) { --dx: -20px; --dy: -34px; }
+.eyey-puffs i:nth-child(3) { --dx: -6px;  --dy: -40px; }
+.eyey-puffs i:nth-child(4) { --dx: 8px;   --dy: -38px; }
+.eyey-puffs i:nth-child(5) { --dx: 22px;  --dy: -30px; }
+.eyey-puffs i:nth-child(6) { --dx: 36px;  --dy: -20px; }
+.eyey.is-burrowing .eyey-puffs i, .eyey.is-rising .eyey-puffs i { animation: eyey-puff .6s ease-out both; }
+.eyey.is-rising .eyey-puffs i { animation-delay: .25s; }
+@keyframes eyey-puff {
+  0% { opacity: 0; transform: translate(0, 0) scale(.6); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1) rotate(90deg); }
+}
+
+/* Reduced motion: no sinking, sway or flying dirt. He just fades out and reappears elsewhere. */
+@media (prefers-reduced-motion: reduce) {
+  .eyey-sway, .eyey-puffs i { animation: none !important; }
+  .eyey .eyey-img { animation: none !important; transition: opacity .25s ease; }
+  .eyey.is-burrowing .eyey-img, .eyey.is-hidden .eyey-img { opacity: 0; transform: none; }
+  .eyey.is-rising .eyey-img { opacity: 1; transform: none; }
+}
