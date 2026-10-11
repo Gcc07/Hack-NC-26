@@ -117,10 +117,10 @@ Calendar service    Scheduling engine   AI assistant
 
 ### Proposed stack
 - **Backend:** Flask (Python); the initial API is in `backend/`
-- **Storage:** in-memory today; **Tiger Data (Tiger Cloud, PostgreSQL)** is the durable store and analytics layer, added behind the existing storage interface. The in-memory adapter stays as an offline fallback for local development.
+- **Storage:** in-memory by default. The Tiger Data adapter (Tiger Cloud, PostgreSQL with TimescaleDB) is the durable store and analytics layer, behind the same storage interface. In-memory storage stays available for local development without an account.
 - **Realtime chat and presence:** Redis Pub/Sub with WebSockets (live fan-out only; Tiger holds the history)
 - **Calendar:** Google Calendar API + an ICS parser
-- **AI:** an LLM API for parsing, drafting, and summarizing
+- **AI:** Google Gemini (`gemini-flash-latest` for parsing and summarizing, `gemini-embedding-001` for semantic search), called from Flask
 - **Frontend:** HTML/CSS/JS with a Frutiger Aero design system
 
 *Beyond the initial Flask API and the storage interface, this is a proposal.*
@@ -219,6 +219,26 @@ The aesthetic carries real function:
 - **Optional assistant mascot** in the spirit of early desktop helpers
 - **Accessibility:** strong text contrast, reduced-motion support, keyboard navigation
 
+### The Frutiger Aero scenery layer (`js/fx.js`)
+
+A living "blue skies and green hills" backdrop, built from local libraries in `js/vendor/` (no CDN, so it works offline):
+
+| Effect | Library |
+| --- | --- |
+| Animated sky and drifting clouds | Vanta.js + Three.js |
+| Iridescent 3D soap bubbles you can chase with the cursor or pop by clicking | Three.js (custom thin-film shader) |
+| Glossy bubbles rising behind the UI | tsParticles |
+| Page and card entrances, bubble bursts, chat message pop-in | GSAP |
+| 3D tilt and glare on cards and the logo | vanilla-tilt.js |
+| Bloops, clicks, pops and a welcome chime (synthesized by `scripts/make_sounds.py`) | Howler.js |
+| Org pulse as a glossy bubble chart | D3 |
+
+Plus CSS-only touches: Vista-style diagonal glass gloss, sun rays, sweeping button sheen, and springy glass-orb navigation.
+
+Judges' laptops come first: the two round buttons at the bottom-left turn the animated scenery and the sounds on or off
+(remembered per browser). Effects start **off** when the OS asks for reduced motion, and the sky automatically falls back to a
+static gradient if frames get slow or WebGL is unavailable. Meadow works fully without any of it.
+
 ---
 
 ## Privacy
@@ -249,15 +269,22 @@ With the default in-memory storage, data resets when the process restarts. The A
 without authentication. See [backend/README.md](backend/README.md) for endpoints,
 examples, and the storage interface used by the Tiger Data adapter.
 
-### Using Tiger Data (planned)
+### Using Tiger Data
 
-To run against Tiger Cloud, create a service, copy its PostgreSQL connection string into a local
-`.env` (never commit it), and select the Tiger adapter. `.env.example` will carry placeholder values only:
+Create a Tiger Cloud service with PostgreSQL 17+ and TimescaleDB enabled. Copy `.env.example` to
+`.env` (never commit it), set the connection string, and install the schema once:
 
 ```sh
-DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<db>?sslmode=require
-STORAGE_BACKEND=tiger   # default: memory
+STORAGE_BACKEND=tiger
+TIMESCALE_SERVICE_URL=postgres://tsdbadmin:<password>@<host>:<port>/tsdb?sslmode=require
+flask --app app tiger-init
 ```
+
+The app then stores shared Meadow data in Tiger and the Board tab reads activity from the
+hypertables. Guestbook notes, event descriptions, officer handoffs, and Dewey summaries are
+searchable there. Keyword search works immediately. Semantic search is optional: set
+`GEMINI_API_KEY`, then run `flask --app app tiger-index-memory`.
+Leave `STORAGE_BACKEND=memory` to run with no database. Cloud forks are not wired up.
 
 ### Browser demo
 
@@ -268,7 +295,7 @@ another tab saves first, the stale edit is rejected and you are asked to repeat
 it. Use `python app.py`; opening `index.html` or the old static server alone will
 not provide the API.
 
-Click **Launch the demo org**, then use the buddy list's "Demo: be someone else" to open other members in new tabs. Optional Google sign-in / calendar import: set `GOOGLE_CLIENT_ID` in `js/config.js`. Optional LLM upgrade for Dewey: add a key under Me → Assistant (stored only in your browser).
+Click **Launch the demo org**, then use the buddy list's "Demo: be someone else" to open other members in new tabs. Optional Google sign-in / calendar import: set `GOOGLE_CLIENT_ID` in `js/config.js`. Optional Gemini upgrade for Dewey: set `GEMINI_API_KEY` in `.env` and restart (the key stays on the server).
 
 Never commit API keys, database credentials, or client secrets.
 
@@ -295,12 +322,12 @@ rule afterward does not remove it from history.
 
 - [ ] Auth and calendar import (Google + ICS)
 - [ ] Orgs, officer/member permissions, and event roles
-- [ ] Tiger Data adapter behind the storage interface (hypertables for busy slots, messages, presence)
+- [x] Tiger Data adapter behind the storage interface (hypertables for busy slots, messages, presence)
 - [ ] Scheduling engine with ranked suggestions and role coverage
-- [ ] Continuous aggregate for org activity (preferred-hours signal)
+- [x] Continuous aggregates for org activity, with the Board reading hypertables so the latest hour still shows up
 - [ ] Group chat with presence
 - [ ] AI assistant for parsing and nudges
-- [ ] Hybrid search over guestbook and event notes (officer handoff)
+- [x] Hybrid search over guestbook and event notes (officer handoff)
 - [ ] Messaging bridge (GroupMe or SMS)
 - [ ] Flares, buddy list, guestbook, and officer handoff
 
@@ -311,7 +338,7 @@ rule afterward does not remove it from history.
 - What is the best demo moment? (e.g. a tabler cancels, the assistant finds a replacement, and a member claims the shift live)
 - Which org type do we design around first: a club with weekly meetings, a Greek or service org, or a project team?
 - Which bridge do we build: GroupMe or SMS?
-- Which Tiger features make the cut for the demo: hybrid search, activity aggregates, or forks?
+- Should the demo use Tiger Cloud forks to reset the org, or is the in-memory reset enough?
 
 ---
 
