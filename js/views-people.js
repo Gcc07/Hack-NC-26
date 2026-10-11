@@ -342,9 +342,9 @@
                 return h('div', null,
                   h('label', null, 'Phone', phoneIn),
                   me.imessageError ? h('p', { class: 'notice' }, me.imessageError) : null,
-                  h('div', { class: 'row wrap' },
+                  h('div', { class: 'row wrap imsg-actions' },
                     h('button', {
-                      class: 'btn primary',
+                      class: 'btn primary small',
                       onClick: () => M.safe(async () => {
                         await M.imsg.savePhone(me.id, phoneIn.value, true);
                         M.toast('iMessage enabled — officers can text your roles');

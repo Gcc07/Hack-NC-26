@@ -603,6 +603,8 @@ body { -webkit-text-stroke: 0; letter-spacing: .01em; }
 .login-card .btn.lg { white-space: normal; min-height: 46px; font-size: 15px; }
 .login-card .profiles { max-height: 150px; overflow-y: auto; }
 .btn { min-height: 35px; }
+.imsg-actions .btn { min-height: 30px; }
+.imsg-actions { margin: 14px 0 12px; }
 .card, .event-card, .org-card, .role { border-radius: 14px; border: 1px solid #aecddd; box-shadow: 0 3px 0 #c3dbe77a,0 6px 15px #17456b0d,inset 0 1px #fff; }
 .card, .role { background: #fafdfff5; }
 .event-card { position: relative; background: linear-gradient(135deg,#fffef4,#f6fbef); padding-top: 21px; }
