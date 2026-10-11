@@ -3,12 +3,13 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from backend import create_app
+from conftest import signed_in
 from backend.repository import InMemoryRepository, VersionConflict
 
 
 @pytest.fixture
 def client():
-    return create_app({"TESTING": True}).test_client()
+    return signed_in(create_app({"TESTING": True}))
 
 
 EXAMPLES = {
@@ -25,6 +26,7 @@ EXAMPLES = {
 @pytest.mark.parametrize("resource,body", EXAMPLES.items())
 def test_crud(client, resource, body):
     url = "/api/" + resource
+    before = client.get(url).json["data"]  # users already holds the signed-in profile
     created = client.post(url, json=body)
     assert created.status_code == 201
     record = created.json["data"]
@@ -32,24 +34,25 @@ def test_crud(client, resource, body):
     assert record["createdAt"] == record["updatedAt"]
     location = created.headers["Location"]
     assert client.get(location).json["data"] == record
-    assert client.get(url).json["data"] == [record]
+    assert client.get(url).json["data"] == before + [record]
     patched = client.patch(location, json={**body, "version": record["version"]})
     assert patched.status_code == 200
     assert patched.json["data"]["version"] == 2
     assert patched.json["data"]["createdAt"] == record["createdAt"]
     assert client.delete(location).status_code == 204
     assert client.get(location).status_code == 404
-    assert client.get(url).json["data"] == []
+    assert client.get(url).json["data"] == before
 
 
 def test_app_instances_are_isolated_and_repository_is_injectable():
     repo = InMemoryRepository()
-    one = create_app(repository=repo).test_client()
-    shared = create_app(repository=repo).test_client()
-    independent = create_app().test_client()
+    one = signed_in(create_app(repository=repo))
+    shared = signed_in(create_app(repository=repo))
+    independent = signed_in(create_app({"TESTING": True}))
     one.post("/api/users", json={"name": "Maya"})
-    assert shared.get("/api/users").json["total"] == 1
-    assert independent.get("/api/users").json["total"] == 0
+    # Two signed-in profiles plus Maya share one repository; the other app has only its own.
+    assert shared.get("/api/users").json["total"] == 3
+    assert independent.get("/api/users").json["total"] == 1
 
 
 def test_storage_returns_detached_copies():
@@ -106,10 +109,11 @@ def test_competing_writes_are_atomic():
     ("messages", {**EXAMPLES["messages"], "channel": "unknown:x"}),
 ])
 def test_validation_has_no_side_effects(client, resource, body):
+    before = client.get("/api/" + resource).json["total"]
     response = client.post("/api/" + resource, json=body)
     assert response.status_code == 400
     assert response.json["error"]["code"] == "validation_error"
-    assert client.get("/api/" + resource).json["total"] == 0
+    assert client.get("/api/" + resource).json["total"] == before
 
 
 def test_patch_validates_merged_record(client):
@@ -143,7 +147,9 @@ def test_http_errors_are_json(client):
 
 
 def test_request_size_limit():
-    client = create_app({"TESTING": True, "MAX_CONTENT_LENGTH": 20}).test_client()
+    app = create_app({"TESTING": True})
+    client = signed_in(app)
+    app.config["MAX_CONTENT_LENGTH"] = 20
     response = client.post("/api/users", json={"name": "x" * 100})
     assert response.status_code == 413
     assert response.json["error"]["code"] == "request_entity_too_large"

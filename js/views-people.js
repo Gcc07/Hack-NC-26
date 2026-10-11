@@ -143,6 +143,7 @@
   V.me = function () {
     const state = S();
     const me = M.me();
+    const isMe = me.id === M.auth.account.userId; // false while borrowing a demo cast member
     const orgs = M.myOrgs(me.id);
 
     // what the org sees: busy bars for the next 7 days
@@ -189,10 +190,22 @@
           h('div', { class: 'row wrap' }, icsFile,
             h('button', { class: 'btn small', onClick: () => M.safe(() => { M.act.importICS(me.id, SAMPLE_ICS(), 'sample-schedule.ics'); M.toast('Sample class schedule imported'); }) }, 'Use a sample schedule')),
           h('div', { class: 'row wrap' },
-            M.google.configured()
-              ? h('button', { class: 'btn', onClick: () => M.google.connectCalendar(me.id).then((n) => M.toast(`Google Calendar connected (${n} busy blocks)`)).catch((e) => M.toast(e.message)) }, 'Connect Google Calendar (free/busy only)')
-              : h('button', { class: 'btn', disabled: true, title: 'Add GOOGLE_CLIENT_ID to js/config.js' }, 'Connect Google Calendar'),
-            me.calendar ? h('button', { class: 'btn danger small', onClick: () => M.confirm('Remove your calendar and all imported busy blocks?', () => { M.act.removeCalendar(me.id); M.toast('Calendar data deleted'); }) }, 'Disconnect & delete data') : null)),
+            !isMe
+              ? null
+              : M.auth.account.googleCalendar
+              ? h('button', { class: 'btn', onClick: async (e) => {
+                  e.currentTarget.disabled = true;
+                  try { M.toast(`Google Calendar synced (${await M.google.sync()} busy blocks)`); }
+                  catch (err) { M.toast(err.message); if (err.code === 'google_not_connected') M.auth.check().then(M.render); }
+                } }, 'Sync Google Calendar')
+              : M.google.configured()
+              ? h('button', { class: 'btn', onClick: M.google.link }, 'Connect Google Calendar (free/busy only)')
+              : h('button', { class: 'btn', disabled: true, title: 'Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the server .env' }, 'Connect Google Calendar'),
+            me.calendar ? h('button', { class: 'btn danger small', onClick: () => M.confirm('Remove your calendar and all imported busy blocks?' + (isMe && M.auth.account.googleCalendar ? ' Meadow’s Google Calendar access is revoked too.' : ''), async () => {
+              M.act.removeCalendar(me.id);
+              if (isMe && M.auth.account.googleCalendar) { await M.auth.disconnectCalendar().catch(() => {}); await M.auth.check(); M.render(); }
+              M.toast('Calendar data deleted');
+            }) }, 'Disconnect & delete data') : null)),
         h('section', { class: 'card' },
           h('h2', null, '🔒 What your orgs see'),
           h('p', { class: 'hint' }, 'Exactly this — grey “busy” bars. No titles, places, or people.'),
@@ -228,7 +241,7 @@
         h('section', { class: 'card' },
           h('h2', null, '⚠️ Danger zone'),
           h('div', { class: 'row wrap' },
-            h('button', { class: 'btn danger small', onClick: () => M.confirm('Delete your account and all your data from Meadow?', () => { M.act.deleteAccount(me.id); location.hash = '#/'; M.render(); }) }, 'Delete my account'),
-            h('button', { class: 'btn small', onClick: () => M.confirm('Wipe ALL shared Meadow data on this server (every profile, org and message, for everyone)?', () => { M.store.reset(); M.session.set(null); location.hash = '#/'; M.render(); }) }, 'Reset shared data')))));
+            isMe ? h('button', { class: 'btn danger small', onClick: () => M.confirm('Delete your account and all your data from Meadow?', () => M.act.deleteAccount(me.id).catch((e) => M.toast(e.message))) }, 'Delete my account') : null,
+            h('button', { class: 'btn small', onClick: () => M.confirm('Wipe ALL shared Meadow data on this server (every profile, org and message, for everyone)? Accounts stay; profiles are recreated at next sign-in.', () => { M.store.reset(); M.session.actAs(null); location.hash = '#/'; M.render(); }) }, 'Reset shared data')))));
   };
 })();

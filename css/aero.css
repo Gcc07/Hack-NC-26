@@ -664,6 +664,32 @@ body { -webkit-text-stroke: 0; letter-spacing: .01em; }
   -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
 }
 #fx-sun { top: -11vmin; left: -11vmin; width: 46vmin; height: 46vmin; }
+
+/* A quiet ornamental pond, embedded in the foreground hill. */
+.pond-koi { animation: koi-glide 9s ease-in-out infinite alternate; }
+.koi-two { animation-duration: 12s; animation-delay: -4s; }
+.koi-three { animation-duration: 10s; animation-delay: -6s; }
+.pond-ripple { opacity: .28; animation: pond-shimmer 6s ease-in-out infinite alternate; }
+@keyframes koi-glide { from { transform: translateX(-9px) rotate(-3deg); } to { transform: translateX(12px) rotate(4deg); } }
+@keyframes pond-shimmer { from { opacity: .12; } to { opacity: .4; } }
+.fx-off .pond-koi, .fx-off .pond-ripple { animation: none; }
+@media (prefers-reduced-motion: reduce) { .pond-koi, .pond-ripple { animation: none; } }
+
+/* ---------- auth ---------- */
+.login-card .stack label { margin-top: 2px; }
+.login-card .hint.small, .google-slot .hint.small { font-size: 12px; margin: 0; }
+.switch-mode { text-align: center; margin: 2px 0 0; }
+.link-btn { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: var(--blue-2, #0b5fae); text-decoration: underline; cursor: pointer; }
+.google-slot { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+/* Google branding guidelines, light theme: do not restyle beyond these values. */
+.gsi-button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 40px; padding: 0 12px; width: 100%;
+  background: #fff; border: 1px solid #747775; border-radius: 20px; color: #1f1f1f; cursor: pointer;
+  font: 500 14px/20px Roboto, Arial, sans-serif; letter-spacing: .25px; box-sizing: border-box; transition: background-color .218s, box-shadow .218s; }
+.gsi-button:hover { background: #f8faff; box-shadow: 0 1px 2px 0 rgba(60,64,67,.30), 0 1px 3px 1px rgba(60,64,67,.15); }
+.gsi-button:active { background: #eef3fd; }
+.gsi-button:focus-visible { outline: 2px solid #0b57d0; outline-offset: 2px; }
+.gsi-icon { display: inline-flex; width: 18px; height: 18px; flex: none; }
+.gsi-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Workspace hierarchy and a quieter, consistent desktop. */
 .login-hero .meadow-tagline { font-size: clamp(30px,3.6vw,46px); letter-spacing: -.035em; line-height: 1.16; max-width: 560px; margin: 0 0 22px; }
 .window h1, .org-title h1 { font-family: var(--font); font-weight: 700; font-size: 25px; letter-spacing: -.025em; }
