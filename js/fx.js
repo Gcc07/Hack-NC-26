@@ -63,74 +63,6 @@
     if (sky) { try { sky.destroy(); } catch { /* already gone */ } sky = null; }
   }
 
-  /* ================================================================== hills and koi pond (stationary SVG landscape) */
-  function buildHills() {
-    const el = $('#fx-hills');
-    if (!el) return;
-    el.innerHTML = `<svg viewBox="0 0 1440 560" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="distant" x2="0" y2="1"><stop stop-color="#b8dda6"/><stop offset="1" stop-color="#659d65"/></linearGradient>
-        <radialGradient id="sunlit" cx=".28" cy=".08" r=".95"><stop stop-color="#d3ef83"/><stop offset=".3" stop-color="#8ac848"/><stop offset=".65" stop-color="#45923a"/><stop offset="1" stop-color="#174e36"/></radialGradient>
-        <radialGradient id="near" cx=".72" cy=".05" r=".85"><stop stop-color="#b6dd57"/><stop offset=".35" stop-color="#71af38"/><stop offset=".8" stop-color="#2d7435"/><stop offset="1" stop-color="#164c31"/></radialGradient>
-        <linearGradient id="front" x1=".1" y1="0" x2=".8" y2="1"><stop stop-color="#8bbd42"/><stop offset=".5" stop-color="#3c8538"/><stop offset="1" stop-color="#154e35"/></linearGradient>
-        <linearGradient id="trail" x2="0" y2="1"><stop stop-color="#e1e9a1" stop-opacity=".08"/><stop offset="1" stop-color="#dbdf97" stop-opacity=".48"/></linearGradient>
-        <radialGradient id="pond-water" cx=".4" cy=".25" r=".8"><stop stop-color="#a6ebdb"/><stop offset=".35" stop-color="#50b7b0"/><stop offset=".75" stop-color="#247b84"/><stop offset="1" stop-color="#16505f"/></radialGradient>
-        <linearGradient id="pond-bank" x2="0" y2="1"><stop stop-color="#a8c55a"/><stop offset=".45" stop-color="#668e3d"/><stop offset="1" stop-color="#b0c075"/></linearGradient>
-        <clipPath id="pond-clip"><path d="M-166 0C-185-34-94-62-25-47S61-54 122-34 194 16 146 35 57 43-20 47-154 40-166 0Z"/></clipPath>
-        <pattern id="grass" width="23" height="19" patternUnits="userSpaceOnUse"><path d="M3 19l2-7m11 4l-1-5m5 8l2-4" stroke="#e3f9aa" stroke-opacity=".15" stroke-width=".8"/></pattern>
-      </defs>
-      <path d="M-40 185 Q150 38 340 150 T740 140 T1130 90 T1480 140 V560 H-40Z" fill="url(#distant)"/>
-      <path d="M-40 280 C160 80 320 60 540 196 S880 300 1090 205 S1330 120 1480 178 V560 H-40Z" fill="url(#sunlit)"/>
-      <path d="M-40 280 C160 80 320 60 540 196 S880 300 1090 205 S1330 120 1480 178" fill="none" stroke="#efffc2" stroke-opacity=".42" stroke-width="2"/>
-      <path d="M-40 385 C190 450 420 360 635 290 S1020 152 1230 252 S1400 300 1480 290 V560 H-40Z" fill="url(#near)"/>
-      <path d="M-40 385 C190 450 420 360 635 290 S1020 152 1230 252 S1400 300 1480 290" fill="none" stroke="#e6f5a1" stroke-opacity=".3" stroke-width="2"/>
-      <path d="M-40 453 C240 335 400 350 650 445 S1080 535 1480 390 V560 H-40Z" fill="url(#front)"/>
-      <path d="M-40 453 C240 335 400 350 650 445 S1080 535 1480 390 V560 H-40Z" fill="url(#grass)"/>
-      <path d="M855 271 C760 315 729 337 794 377 S945 449 883 560 H1000 C1045 463 861 404 816 377 S802 313 855 271Z" fill="url(#trail)"/>
-      <g class="meadow-pond" transform="translate(365 467)">
-        <ellipse cx="6" cy="20" rx="185" ry="51" fill="#183d27" opacity=".18"/>
-        <path d="M-166 0C-185-34-94-62-25-47S61-54 122-34 194 16 146 35 57 43-20 47-154 40-166 0Z" fill="url(#pond-bank)" stroke="url(#pond-bank)" stroke-width="17"/>
-        <path d="M-166 0C-185-34-94-62-25-47S61-54 122-34 194 16 146 35 57 43-20 47-154 40-166 0Z" fill="url(#pond-water)" stroke="#315f46" stroke-width="3"/>
-        <g clip-path="url(#pond-clip)">
-          <path d="M-162-14Q-94-47-27-30T134-18" fill="none" stroke="#e3fff3" stroke-opacity=".55" stroke-width="3"/>
-          <ellipse cx="20" cy="8" rx="121" ry="25" fill="none" stroke="#c1f6e7" stroke-opacity=".2"/>
-          <g transform="translate(-66 8) rotate(-16)"><g class="pond-koi koi-one">
-            <path d="M-16 0l-12-7 2 7-2 7Z" fill="#ffe9c6"/><ellipse rx="20" ry="7" fill="#fff5d9"/>
-            <path d="M-11-6q9-2 12 6-6 6-13 4Z M10-5q10 1 8 6l-7 3Z" fill="#ed823a"/>
-            <path d="M0-5l-5-6 11 6M0 5l-4 7 10-7" fill="#fff5d9" opacity=".8"/><circle cx="15" cy="-2" r="1.2" fill="#253c40"/>
-          </g></g>
-          <g transform="translate(49 17) rotate(166)"><g class="pond-koi koi-two">
-            <path d="M-14 0l-10-6 2 6-2 6Z" fill="#e8dbad"/><ellipse rx="17" ry="6" fill="#f6d18c"/>
-            <path d="M-11-4l9-1 4 6-9 3Z M7-5l6 2-3 5-5-1Z" fill="#d85f26"/>
-            <path d="M-1-4l-5-5 10 5M0 5l-3 5 7-5" fill="#fff0cf" opacity=".75"/><circle cx="12" cy="-2" r="1" fill="#253c40"/>
-          </g></g>
-          <g transform="translate(7 -18) rotate(12)"><g class="pond-koi koi-three">
-            <path d="M-12 0l-9-5 2 5-2 5Z" fill="#f7f4db"/><ellipse rx="14" ry="5" fill="#f8f4e0"/><path d="M-6-4l7 1 1 6-6 1Z" fill="#425659"/><path d="M7-4l5 2-2 4-4-2Z" fill="#ed7638"/><circle cx="10" cy="-1" r="1" fill="#263a3d"/>
-          </g></g>
-          <g class="pond-ripple" fill="none" stroke="#e9fff7" stroke-width="1.2"><ellipse cx="-62" cy="4" rx="39" ry="12"/><ellipse cx="48" cy="15" rx="29" ry="9"/></g>
-        </g>
-        <g fill="#618c40" stroke="#b6d174" stroke-width="1">
-          <path d="M-115-15l15-9a20 10 0 11-1-1Z"/><path d="M113 22l12-7a16 8 0 11-1-1Z"/>
-        </g>
-        <g transform="translate(-118 -21)" fill="#fff0ed" stroke="#dbaac0" stroke-width=".7"><path d="M0 3Q-15-1-10-7Q0-6 0 3M0 3Q-5-13 1-14Q8-7 0 3M0 3Q14-9 13-1Q7 6 0 3"/><ellipse cy="2" rx="4" ry="2" fill="#f7d276"/></g>
-        <g fill="#b7bea0" stroke="#71856a" stroke-width="1"><ellipse cx="-157" cy="-26" rx="13" ry="5" transform="rotate(-14 -157 -26)"/><ellipse cx="-140" cy="-36" rx="9" ry="4"/><ellipse cx="145" cy="36" rx="14" ry="5"/><ellipse cx="164" cy="28" rx="8" ry="4"/></g>
-        <path d="M-181 15q-6-20-11-23m11 23q1-22 7-28m-7 28q-11-11-18-10M175-7q3-15 10-19m-10 19q-3-20-7-23" fill="none" stroke="#789c43" stroke-width="3" stroke-linecap="round"/>
-      </g>
-    </svg>`;
-  }
-
-  function buildFlowers() {
-    const el = $('#fx-flowers');
-    if (!el) return;
-    const spots = [
-      [8, 78, 1], [18, 86, 0.75], [29, 82, 0.95], [41, 90, 0.7],
-      [54, 84, 1.05], [67, 88, 0.8], [78, 80, 0.9], [88, 86, 0.7], [96, 82, 0.85],
-    ];
-    el.innerHTML = spots.map(([x, y, s], i) =>
-      '<i class="bloom b' + (i % 3) + '" style="left:' + x + '%;bottom:' + (100 - y) + '%;--s:' + s + ';animation-delay:' + (-i * 0.7) + 's"></i>'
-    ).join('');
-  }
-
   /* ================================================================== rising bubbles: tsParticles */
   const TINTS = ['120,220,255', '150,235,170', '205,175,255', '255,255,255'];
   function bubbleSprite(tint) {
@@ -437,7 +369,7 @@
     const popped = tryPop(e.clientX, e.clientY);
     const interactive = !!(e.target.closest && e.target.closest(INTERACTIVE));
     if (popped) { burst(e.clientX, e.clientY, 9); fx.play('pop'); }
-    else if (interactive) burst(e.clientX, e.clientY, 3);
+
   }, true);
 
   document.addEventListener('click', (e) => {
@@ -451,15 +383,10 @@
     if (reduced || !window.gsap) return;
     const q = (s) => root.querySelectorAll(s);
     const heroes = q('.login-hero > *');
-    if (heroes.length) gsap.from(heroes, { x: -46, opacity: 0, duration: 0.8, stagger: 0.09, ease: 'back.out(1.5)', clearProps: 'all' });
+    if (heroes.length) gsap.from(heroes, { y: 8, opacity: 0, duration: 0.3, stagger: 0.03, ease: 'power2.out', clearProps: 'all' });
     const card = q('.login-card');
-    if (card.length) gsap.from(card, { x: 60, opacity: 0, scale: 0.94, duration: 0.85, delay: 0.15, ease: 'back.out(1.4)', clearProps: 'all' });
-    const rail = q('.rail-btn');
-    if (rail.length) gsap.from(rail, { scale: 0, opacity: 0, duration: 0.55, stagger: 0.05, ease: 'back.out(2.6)', clearProps: 'all' });
-    const win = q('.window');
-    if (win.length) gsap.from(win, { y: 16, opacity: 0, duration: 0.45, ease: 'power2.out', clearProps: 'all' });
-    const items = Array.from(q(ENTER_ITEMS)).slice(0, 16);
-    if (items.length) gsap.from(items, { y: 22, opacity: 0, scale: 0.97, duration: 0.55, delay: 0.12, stagger: 0.055, ease: 'back.out(1.4)', clearProps: 'all' });
+    if (card.length) gsap.from(card, { y: 8, opacity: 0, duration: 0.3, ease: 'power2.out', clearProps: 'all' });
+
   }
 
   /* ================================================================== newest chat messages pop in */
@@ -510,8 +437,6 @@
   /* ================================================================== boot */
   $('#fx-toggle-visual').addEventListener('click', () => fx.setVisual(!fx.visual));
   $('#fx-toggle-sound').addEventListener('click', () => fx.setSound(!fx.sound));
-  buildHills();
-  buildFlowers();
   applySound();
   applyVisual();
   if (!reduced) pointerRaf = requestAnimationFrame(smoothPointerLoop);

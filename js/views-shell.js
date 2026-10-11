@@ -48,6 +48,48 @@
     return wrap;
   };
 
+  /* Login hero: a tightly packed vertical montage of every Meadow logo. It pans downward fast, then eases out
+     and comes to rest on the wide logo + tagline. The pan plays once per page load; if the screen re-renders
+     mid-pan it resumes where it left off, and afterwards it shows the resting state. */
+  const REEL_IMAGES = {
+    one: ['Assets/Meadow1.png', 256, 256],
+    two: ['Assets/Meadow2.png', 256, 256],
+    three: ['Assets/Meadow3.png', 450, 337],
+    wide: ['Assets/meadow_2.png', 484, 256],
+  };
+  const reelTile = (key, cls) => {
+    const [src, width, height] = REEL_IMAGES[key];
+    return h('img', { class: 'reel-tile' + (cls ? ' ' + cls : ''), src, width, height, alt: key === 'wide' && cls ? 'Meadow' : '', draggable: 'false' });
+  };
+  const REEL_MS = 9000;
+  let reelStart = null; // the pan runs once per page load; a re-render resumes it at the right moment
+  V.logoReel = function () {
+    const above = h('div', { class: 'reel-above', 'aria-hidden': 'true' }, ['two', 'three', 'one'].map((k) => reelTile(k)));
+    const belowKeys = [];
+    for (let i = 0; i < 3; i++) belowKeys.push('three', 'two', 'one', 'wide');
+    const below = h('div', { class: 'reel-below', 'aria-hidden': 'true' }, belowKeys.map((k) => reelTile(k)));
+    const belowBox = h('div', { class: 'reel-below-box' }, below);
+    const main = h('div', { class: 'reel-main-block' }, reelTile('wide', 'reel-main'), h('h1', { class: 'tagline' }, 'Meet Everyone, ', h('span', { class: 'hl' }, 'Anywhere'), ', Doing Ordinary Wonders'));
+    const col = h('div', { class: 'reel-col' }, above, main, belowBox);
+    if (reelStart === null) reelStart = performance.now();
+    const playing = performance.now() - reelStart < REEL_MS;
+    const reel = h('div', { class: 'reel' + (playing ? ' reel-pending' : '') }, col);
+    if (playing) {
+      setTimeout(() => {
+        reel.classList.remove('reel-pending');
+        const calm = window.matchMedia('(max-width: 760px), (prefers-reduced-motion: reduce)').matches;
+        if (calm || !col.isConnected || !col.animate) return;
+        const distance = Math.max(0, below.offsetHeight - reel.clientHeight / 2 - 20);
+        const run = col.animate(
+          [{ transform: `translateY(calc(-50% - ${distance}px))` }, { transform: 'translateY(-50%)' }],
+          { duration: REEL_MS, easing: 'cubic-bezier(.08,.6,.12,1)', fill: 'both' }
+        );
+        run.currentTime = Math.min(REEL_MS, performance.now() - reelStart);
+      }, 0);
+    }
+    return reel;
+  };
+
   V.login = function () {
     const pending = sessionStorage.getItem('meadow:pendingJoin');
     const profiles = Object.values(S().users).filter((u) => !u.placeholder).sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
@@ -71,15 +113,7 @@
       h(
         'div',
         { class: 'login-hero' },
-        h('div', { class: 'hero-brand' }, M.logo(96), h('span', { class: 'wordmark' }, 'Meadow')),
-        h('div', { class: 'desktop-label' }, M.icon('leaf', 18), 'A little space to come together'),
-        h('h1', { class: 'hero-heading' }, 'Good things grow', h('br'), 'with good company.'),
-        h('p', { class: 'tagline' }, TAGLINE),
-        h('p', { class: 'lede' }, 'Find your people. Make a plan. Bring it to life. Your student org’s sunny little corner of the internet.'),
-        h('ul', { class: 'bullets' },
-          h('li', null, M.icon('calendar'), h('span', null, 'Find a time', h('small', null, 'Share availability. Keep the details private.'))),
-          h('li', null, M.icon('drop'), h('span', null, 'A little help from Dewey', h('small', null, 'Your planning buddy. You make the call.'))),
-          h('li', null, M.icon('flower'), h('span', null, 'Watch your plans bloom', h('small', null, 'Real people. Real roles. Things get done.'))))
+        V.logoReel()
       ),
       h(
         'div',
@@ -110,7 +144,7 @@
             const { orgId, ids } = M.act.seedDemo();
             M.session.set(ids['Maya Chen']);
             M.store.update((s) => (s.users[ids['Maya Chen']].lastSeen = Date.now()), { silent: true });
-            location.hash = '#/o/' + orgId + '/chat';
+            location.hash = '#/o/' + orgId + '/overview';
             M.afterLogin();
           },
         }, M.icon('leaf'), 'Launch the demo org'),
@@ -142,7 +176,7 @@
       { class: 'rail glass', 'aria-label': 'Your organizations' },
       h('a', { class: 'rail-btn' + (route.name === 'home' ? ' active' : ''), href: '#/', title: 'Home', 'aria-label': 'Home' }, M.icon('folder', 30)),
       orgs.map((o) =>
-        h('a', { class: 'rail-btn' + (active && active.id === o.id ? ' active' : ''), href: '#/o/' + o.id + '/chat', title: o.name, 'aria-label': o.name }, o.emoji)
+        h('a', { class: 'rail-btn' + (active && active.id === o.id ? ' active' : ''), href: '#/o/' + o.id + '/overview', title: o.name, 'aria-label': o.name }, o.emoji)
       ),
       h('button', { class: 'rail-btn add', title: 'Create or join an org', 'aria-label': 'Create or join an org', onClick: () => V.orgModal() }, '+')
     );
@@ -166,6 +200,23 @@
   };
 
   /* ------------------------------------------------------------------ home */
+  V.focusPanel = function (orgs) {
+    const me = M.me(), now = Date.now();
+    const ids = new Set(orgs.map(o => o.id));
+    const events = Object.values(S().events).filter(e => ids.has(e.orgId) && e.status !== 'cancelled' && e.end > now).sort((a,b) => a.start-b.start);
+    const next = events[0];
+    const open = events.filter(e => M.eventProgress(e).open > 0);
+    const shifts = events.flatMap(e => e.roles.filter(r => r.claims.includes(me.id)).map(r => ({event:e, role:r, times:M.roleShift(e,r)}))).filter(s => s.times[1] > now).sort((a,b) => a.times[0]-b.times[0]);
+    const shift = shifts[0];
+    const link = (e, label) => h('a', {class:'btn small', href:'#/o/'+e.orgId+'/events/'+e.id}, label);
+    return h('section', {class:'focus-section'},
+      h('div', {class:'section-heading'}, h('h2', null, 'Your meadow, at a glance'), h('p', {class:'hint'}, 'A little less planning. A little more coming together.')),
+      h('div', {class:'focus-grid'},
+        h('article', {class:'card focus-card'}, h('span', {class:'eyebrow'}, M.icon('calendar'), 'Next event'), h('h3', null, next ? next.title : 'Room for a new idea'), h('p', null, next ? M.fmt.range(next.start,next.end) : 'Your upcoming events will appear here.'), next ? link(next,'View event') : null),
+        h('article', {class:'card focus-card'}, h('span', {class:'eyebrow'}, M.icon('flower'), 'People needed'), h('h3', null, open.length ? M.plural(open.reduce((n,e)=>n+M.eventProgress(e).open,0),'open spot') : 'All caught up'), h('p', null, open.length ? M.plural(open.length,'event')+' could use a helping hand.' : 'No upcoming required roles are waiting.'), open.length ? link(open[0],'View open roles') : null),
+        h('article', {class:'card focus-card'}, h('span', {class:'eyebrow'}, M.icon('leaf'), 'Your next commitment'), h('h3', null, shift ? shift.role.name : 'Find your part'), h('p', null, shift ? shift.event.title+' · '+M.fmt.range(...shift.times) : 'Claim a role to put your next shift here.'), shift ? link(shift.event,'View your shift') : open.length ? link(open[0],'Explore roles') : null)));
+  };
+
   V.home = function (orgs) {
     const me = M.me();
     const state = S();
@@ -180,6 +231,7 @@
       { class: 'main-scroll pad home-content', 'data-scroll': 'main' },
       h('h1', null, `Hi ${M.firstName(me.name)}! `, h('span', { class: 'wave' }, '👋')),
       h('p', { class: 'lede' }, 'Welcome to Meadow — where student orgs figure out when, where, and who.'),
+      V.focusPanel(orgs),
       h('section', { class: 'card' },
         h('h2', null, 'Getting started'),
         h('ol', { class: 'steps' },
@@ -196,7 +248,7 @@
               orgs.map((o) => {
                 const upcoming = Object.values(state.events).filter((e) => e.orgId === o.id && e.status !== 'cancelled' && e.end > Date.now()).sort((a, b) => a.start - b.start);
                 const pend = upcoming.filter((e) => e.status === 'pending').length;
-                return h('a', { class: 'org-card', href: '#/o/' + o.id + '/chat' },
+                return h('a', { class: 'org-card', href: '#/o/' + o.id + '/overview' },
                   h('span', { class: 'org-emoji' }, o.emoji),
                   h('strong', null, o.name),
                   h('span', { class: 'hint' }, `${M.plural(Object.keys(o.members).length, 'member')} · ${o.members[me.id].role}`),
@@ -291,12 +343,13 @@
   V.orgWindow = function (org) {
     const me = M.me();
     const r = M.ui.route;
-    const tabs = [['chat', 'chat', 'Chat'], ['events', 'calendar', 'Events'], ['schedule', 'calendar', 'Schedule'], ['board', 'folder', 'Board'], ['members', 'people', 'Members']];
+    const tabs = [['overview', 'leaf', 'Overview'], ['chat', 'chat', 'Chat'], ['events', 'calendar', 'Events'], ['schedule', 'calendar', 'Schedule'], ['board', 'folder', 'Board'], ['members', 'people', 'Members']];
     const state = S();
     const openFlares = Object.values(state.flares).filter((f) => f.status === 'open' && state.events[f.eventId] && state.events[f.eventId].orgId === org.id).length;
     const tab = tabs.find((t) => t[0] === r.tab) ? r.tab : 'chat';
     let body;
-    if (tab === 'chat') body = V.chatTab(org);
+    if (tab === 'overview') body = h('div', { class: 'main-scroll pad' }, V.focusPanel([org]), h('section', { class: 'card' }, h('h2', null, 'Make something happen'), h('p', { class: 'hint' }, 'Share availability, agree on a time, and take a role. Dewey can help you plan.'), h('a', { class: 'btn', href: '#/o/' + org.id + '/schedule' }, M.icon('calendar'), 'Find a time')));
+    else if (tab === 'chat') body = V.chatTab(org);
     else if (tab === 'events') body = V.eventsTab(org);
     else if (tab === 'schedule') body = V.scheduleTab(org);
     else if (tab === 'board') body = V.boardTab(org);

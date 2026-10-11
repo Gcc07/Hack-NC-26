@@ -51,13 +51,14 @@
     return h('a', { class: 'event-card status-' + ev.status, href: '#/o/' + ev.orgId + '/events/' + ev.id },
       h('div', { class: 'row between' }, h('span', { class: 'pill' }, ev.type), statusPill(ev)),
       h('h3', null, ev.title),
-      h('div', { class: 'hint' }, '🕒 ' + M.fmt.range(ev.start, ev.end)),
+      h('div', { class: 'event-date icon-label' }, M.icon('calendar'), M.fmt.range(ev.start, ev.end)),
       ev.location ? h('div', { class: 'hint' }, '📍 ' + ev.location) : null,
       planHint ? h('div', { class: 'chip free' }, '📱 ' + planHint) : null,
       prog.need
         ? M.gardenProgress(prog)
         : h('small', null, 'No required roles'),
-      mine.length ? h('div', { class: 'chip free' }, 'You: ' + mine.map((r) => r.name).join(', ')) : null);
+      mine.length ? h('div', { class: 'chip free' }, 'You: ' + mine.map((r) => r.name).join(', ')) : null,
+      h('span', { class: 'event-cta' }, prog.open && ev.status !== 'cancelled' && ev.end > Date.now() ? 'View open roles →' : 'View event →'));
   }
 
   /* ---------------------------------------------------------------- .ics export of one event */
@@ -110,9 +111,9 @@
         h('div', { class: 'role-actions' },
           cancelled ? null : iHave
             ? h('button', { class: 'btn small', onClick: () => M.confirm(`Release your ${role.name} spot? A flare will go out so someone else can pick it up.`, () => M.safe(() => M.act.releaseRole(ev.id, role.id, me.id))) }, 'Release')
-            : h('button', { class: 'btn small primary', disabled: full, onClick: () => V.claimWithCheck(ev, role, me) }, full ? 'Full' : '🙋 Claim'),
+            : h('button', { class: 'btn small primary', disabled: full, onClick: () => V.claimWithCheck(ev, role, me) }, M.icon('leaf', 19), full ? 'Full' : 'Claim'),
           officer && !full && !cancelled && !openFlare
-            ? h('button', { class: 'btn small', title: 'Post a flare to the whole org', onClick: () => { M.act.sendFlare(ev.id, role.id, me.id); M.toast('Flare sent'); } }, '🔥 Flare')
+            ? h('button', { class: 'btn small', title: 'Post a flare to the whole org', onClick: () => { M.act.sendFlare(ev.id, role.id, me.id); M.toast('Flare sent'); } }, M.icon('flower', 19), 'Flare')
             : null));
     };
 
@@ -188,8 +189,8 @@
         prog.need ? M.gardenProgress(prog) : null,
         ev.status === 'pending' ? h('p', { class: 'notice' }, `Pending — ${M.plural(prog.open, 'required spot')} still open. It confirms automatically once every required role is claimed.`) : null,
         h('div', { class: 'row wrap' },
-          h('button', { class: 'btn small', onClick: () => M.download(ev.title.replace(/\W+/g, '-') + '.ics', eventIcs(ev), 'text/calendar') }, '📆 Add to my calendar'),
-          officer && !cancelled && prog.open ? h('button', { class: 'btn small', onClick: () => { M.ui.channel = 'event:' + ev.id; M.act.postMessage('event:' + ev.id, me.id, '@dewey nudge'); M.toast('Dewey is drafting nudges in the event chat'); } }, '🤖 Draft nudges with Dewey') : null,
+          h('button', { class: 'btn small', onClick: () => M.download(ev.title.replace(/\W+/g, '-') + '.ics', eventIcs(ev), 'text/calendar') }, M.icon('calendar', 19), 'Add to my calendar'),
+          officer && !cancelled && prog.open ? h('button', { class: 'btn small', onClick: () => { M.ui.channel = 'event:' + ev.id; M.act.postMessage('event:' + ev.id, me.id, '@dewey nudge'); M.toast('Dewey is drafting nudges in the event chat'); } }, M.icon('drop', 19), 'Draft nudges with Dewey') : null,
           officer && !cancelled ? h('button', { class: 'btn small danger', onClick: () => M.confirm('Cancel this event for everyone?', () => M.safe(() => M.act.cancelEvent(ev.id, me.id))) }, 'Cancel event') : null)),
       bridge,
       h('section', { class: 'card' }, h('h2', { class: 'icon-label' }, M.icon('people'), 'Roles'),
