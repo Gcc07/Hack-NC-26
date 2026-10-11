@@ -234,7 +234,6 @@
     const state = S();
     const me = M.me();
     const isMe = me.id === M.auth.account.userId; // false while borrowing a demo cast member
-    const orgs = M.myOrgs(me.id);
 
     // what the org sees: busy bars for the next 7 days
     const days = Array.from({ length: 7 }, (_, i) => M.addDays(M.startOfDay(Date.now()), i));
@@ -363,15 +362,6 @@
                       : null),
                   opted ? h('p', null, h('span', { class: 'chip free' }, 'Opted in'), ' Dewey can text this number.') : h('p', { class: 'hint' }, 'Not opted in yet.'));
               })())
-          : null,
-        orgs.length
-          ? h('section', { class: 'card' },
-              h('h2', null, '📡 Messaging bridge opt-in'),
-              h('p', { class: 'hint' }, 'If an org has a GroupMe bridge, your org-chat messages are mirrored out only if you opt in.'),
-              orgs.map((o) => {
-                const cb = h('input', { type: 'checkbox', checked: !!(me.bridgeOptIn && me.bridgeOptIn[o.id]), onChange: () => M.act.setBridgeOptIn(me.id, o.id, cb.checked) });
-                return h('label', { class: 'check' }, cb, `${o.emoji} ${o.name}` + (o.bridge.type === 'none' ? ' (no bridge set up)' : ' (' + o.bridge.type + ')'));
-              }))
           : null,
         h('section', { class: 'card' },
           h('h2', null, '🤖 Assistant'),
