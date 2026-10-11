@@ -578,6 +578,14 @@
         ['Food pickup', true, 1, -45, 45, 'start', []],
         ['Cleanup', false, 2, 0, 30, 'end', []],
       ]);
+      const repairDay = nextDow(0, 13);
+      const repair = mkEvent('Community Share & Repair', 'Workshop', 'Community lounge · proposed venue', repairDay, repairDay + 2 * HOUR, [
+        ['Setup', true, 2, -30, 30, 'start', ['Jordan Reyes']],
+        ['Welcome desk', true, 1, 0, 120, 'start', ['Priya Nair']],
+        ['Mending station', true, 1, 0, 120, 'start', []],
+        ['Exchange station', true, 1, 0, 120, 'start', []],
+        ['Cleanup', true, 2, 0, 30, 'end', ['Theo Martin']],
+      ], {description: 'Demo scenario: a free clothing and dorm-item swap with a mending station. Everyone is welcome; bringing an item is optional. Help neighbors reuse what they have and learn a repair skill. The venue and supplies still need organizer confirmation; staffing complete does not mean all logistics are ready.'});
       const tue = nextDow(2, 18, 30);
       const meeting = mkEvent('Weekly General Meeting', 'Meeting', 'Hall 204', tue, tue + HOUR, []);
       const past = new Date(M.addDays(today0, -6)).setHours(18, 0, 0, 0);
@@ -595,6 +603,7 @@
       // seed chat
       const say = (n, t, ago) => s.messages.push({ id: M.uid('m'), channel: 'org:' + orgId, userId: ids[n], text: t, ts: now - ago * MIN, source: 'app', payload: null });
       s.messages.push({ id: M.uid('m'), channel: 'org:' + orgId, userId: null, text: 'Welcome to **Sunrise Service Society**! I\'m Dewey. Ask me things like “@dewey find a time for a 2 hour social this weekend, not Sunday, need two tablers”.', ts: now - 300 * MIN, source: 'assistant', payload: null });
+      s.messages.push({ id: M.uid('m'), channel: 'org:' + orgId, userId: null, text: 'Help bring Community Share & Repair to life: welcome neighbors, run the exchange, or help with mending. The venue still needs confirmation.', ts: now - 250 * MIN, source: 'assistant', payload: { type: 'event', eventId: repair.id } });
       say('Maya Chen', 'Hey all — the involvement fair is Thursday! We still need a food pickup and a second tabling crew.', 240);
       say('Jordan Reyes', 'I\'ll handle setup. Sam and Alex are on the first tabling shift 🙌', 200);
       say('Riley Brooks', 'I can do the second shift but I need one more person with me.', 150);
