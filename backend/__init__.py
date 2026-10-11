@@ -67,13 +67,14 @@ def create_app(config=None, *, repository: Repository | None = None):
     app.extensions["auth_throttle"] = Throttle()
     app.before_request(guard_api)
     app.register_blueprint(auth_api)
-    app.register_blueprint(api)
+    # Register /api/ai and /api/insights before the catch-all /api/<resource> routes.
     from .gemini import ai_api
     from .insights import insights_api
     from .tiger_cli import register_commands
     app.register_blueprint(ai_api)
     app.register_blueprint(insights_api)
     register_commands(app)
+    app.register_blueprint(api)
 
     # Connection errors never echo a database URL or password into a response.
     from .tiger_repository import TigerUnavailable

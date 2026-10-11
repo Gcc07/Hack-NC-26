@@ -157,8 +157,8 @@
       input.value = '';
       M.act.postMessage(channel, me.id, text);
     };
-    const quick = (label, text, direct) =>
-      h('button', { type: 'button', class: 'chip link', onClick: () => (direct ? M.act.postMessage(channel, me.id, text) : ((input.value = text), input.focus())) }, label);
+    const quick = (icon, label, text, direct) =>
+      h('button', { type: 'button', class: 'chip link', onClick: () => (direct ? M.act.postMessage(channel, me.id, text) : ((input.value = text), input.focus())) }, M.icon(icon, 17), label);
 
     return h('section', { class: 'chat', 'aria-label': title },
       h('div', { class: 'chat-head' }, h('strong', null, title), org && !channel.startsWith('dm:') ? h('span', { class: 'hint' }, 'Dewey is listening for @dewey') : null),
@@ -166,10 +166,10 @@
         msgs.length ? msgs.map((m) => messageEl(m, state, me, org)) : h('p', { class: 'hint pad' }, 'No messages yet. Say hello! 👋')),
       org && !channel.startsWith('dm:')
         ? h('div', { class: 'quick' },
-            quick('✨ Find a time…', '@dewey find a time for a 2 hour social this weekend, not Sunday, need two tablers'),
-            quick('📣 Nudge open roles', '@dewey nudge', true),
-            quick('🧾 Summarize', '@dewey summarize', true),
-            quick('❓ Help', '@dewey help', true))
+            quick('calendar', 'Find a time…', '@dewey find a time for a 2 hour social this weekend, not Sunday, need two tablers'),
+            quick('people', 'Nudge open roles', '@dewey nudge', true),
+            quick('folder', 'Summarize', '@dewey summarize', true),
+            quick('drop', 'Help', '@dewey help', true))
         : null,
       h('form', { class: 'chat-form', onSubmit: send }, input, h('button', { class: 'btn primary', type: 'submit' }, 'Send')));
   };

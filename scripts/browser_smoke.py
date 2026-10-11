@@ -59,6 +59,7 @@ try:
         page.get_by_label("Password").fill("smoke test pass")
         page.get_by_role("button", name="Sign in", exact=True).click()
         page.get_by_role("button", name="Load demo org").click()
+        page.get_by_role("tab", name="Chat", exact=True).click()
         expect(page.get_by_role("textbox", name="Message", exact=True)).to_be_visible()
         page.evaluate("Meadow.store.flush()")
         org_id = page.evaluate("Object.keys(Meadow.store.get().orgs)[0]")
