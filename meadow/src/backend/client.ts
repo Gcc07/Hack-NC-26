@@ -32,6 +32,7 @@ export interface BackendClient {
   health(): Promise<boolean>;
   aiStatus(): Promise<boolean>;
   get(resource: string, id: string): Promise<BackendRecord | null>;
+  ensure(resource: string, id: string, body: Record<string, unknown>): Promise<BackendRecord>;
   patch(resource: string, id: string, body: Record<string, unknown>): Promise<BackendRecord>;
   create(resource: string, body: Record<string, unknown>): Promise<BackendRecord>;
   chat(system: string, text: string, history: Array<{ role: string; content: string }>): Promise<string | null>;
@@ -80,6 +81,24 @@ class HttpBackendClient implements BackendClient {
     const res = await fetch(`${this.baseUrl}/api/${resource}/${encodeURIComponent(id)}`);
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`GET ${resource}/${id} failed (${res.status})`);
+    const json = (await res.json()) as { data: BackendRecord };
+    return json.data;
+  }
+
+  async ensure(
+    resource: string,
+    id: string,
+    body: Record<string, unknown>
+  ): Promise<BackendRecord> {
+    const res = await fetch(`${this.baseUrl}/api/${resource}/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => "");
+      throw new Error(`PUT ${resource}/${id} failed (${res.status}) ${err.slice(0, 200)}`);
+    }
     const json = (await res.json()) as { data: BackendRecord };
     return json.data;
   }
@@ -186,6 +205,9 @@ class DisabledBackendClient implements BackendClient {
   }
   async get() {
     return null;
+  }
+  async ensure(): Promise<BackendRecord> {
+    throw new Error("Backend client disabled");
   }
   async patch(): Promise<BackendRecord> {
     throw new Error("Backend client disabled");

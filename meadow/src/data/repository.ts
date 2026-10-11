@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { BackendClient } from "../backend/client.ts";
+import type { BackendClient, BackendRecord } from "../backend/client.ts";
 import { SAMPLE } from "./sample.ts";
 import {
   rememberMessageId,
@@ -106,7 +106,7 @@ export class MeadowRepository {
     if (!state.organizations[orgId]) {
       state.organizations[orgId] = {
         id: orgId,
-        name: orgId === SAMPLE.orgId ? "Demo Org" : orgId,
+        name: orgId === SAMPLE.orgId ? "Sunrise Service Society" : orgId,
         memberIds: [],
       };
     }
@@ -129,8 +129,24 @@ export class MeadowRepository {
 
     if (this.backend?.enabled) {
       try {
-        const user = await this.backend.get("users", input.userId);
-        if (user) {
+        let user = await this.backend.get("users", input.userId);
+        if (!user) {
+          user = await this.backend.ensure("users", input.userId, {
+            name: input.name || input.userId,
+            email: "",
+            photo: "",
+            busy: [],
+            statusBusy: [],
+            calendar: null,
+            bridgeOptIn: {},
+            presence: "online",
+            away: "",
+            lastSeen: 0,
+            phone,
+            imessageOptIn: true,
+            imessageError: "",
+          });
+        } else {
           await this.backend.patch("users", input.userId, {
             name: user.name,
             email: user.email ?? "",
@@ -403,7 +419,7 @@ export class MeadowRepository {
 
     if (this.backend?.enabled) {
       try {
-        const remote = await this.backend.get("events", eventId);
+        const remote = await this.remoteEvent(eventId);
         if (remote) {
           const votes = {
             ...((remote.meetingTimeVotes as Record<string, unknown>) || {}),
@@ -474,7 +490,7 @@ export class MeadowRepository {
 
     if (this.backend?.enabled) {
       try {
-        const remote = await this.backend.get("events", eventId);
+        const remote = await this.remoteEvent(eventId);
         if (remote) {
           const food = {
             ...((remote.foodFeedback as Record<string, unknown>) || {}),
@@ -525,6 +541,34 @@ export class MeadowRepository {
     state.updates.push({ ...update, seq: state.updateSeq });
   }
 
+  private async remoteEvent(eventId: string): Promise<BackendRecord | null> {
+    if (!this.backend?.enabled) return null;
+    let remote = await this.backend.get("events", eventId);
+    if (remote) return remote;
+    // Bootstrap the shared demo event if Flask was restarted empty.
+    const local = (await this.store.load()).events[eventId];
+    const start = Date.now() + 2 * 24 * 60 * 60 * 1000;
+    remote = await this.backend.ensure("events", eventId, {
+      orgId: local?.orgId ?? SAMPLE.orgId,
+      title: local?.title ?? "Weekly General Meeting",
+      start,
+      end: start + 60 * 60 * 1000,
+      type: "Meeting",
+      location: "",
+      description: "",
+      status: "pending",
+      createdBy: SAMPLE.memberId,
+      checkinCode: "",
+      attendance: [],
+      roles: [],
+      plans: {},
+      imessage: {},
+      meetingTimeVotes: {},
+      foodFeedback: {},
+    });
+    return remote;
+  }
+
   private async syncEventPlans(
     eventId: string,
     memberId: string,
@@ -534,11 +578,8 @@ export class MeadowRepository {
   ): Promise<boolean> {
     if (!this.backend?.enabled) return true;
     try {
-      const remote = await this.backend.get("events", eventId);
-      if (!remote) {
-        console.warn(`[meadow] backend event ${eventId} not found; local save kept`);
-        return true;
-      }
+      const remote = await this.remoteEvent(eventId);
+      if (!remote) return false;
       const plans = {
         ...((remote.plans as Record<string, unknown>) || {}),
         [memberId]: { status, minutes, ts },

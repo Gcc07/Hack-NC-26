@@ -27,11 +27,11 @@ export interface HandlerResult {
 
 const TIME_OPTIONS = ["6:30", "8:30"] as const;
 const FALLBACK_RSVP =
-  "🌊 Demo Org reminder: Sample Meeting is tomorrow at 6:30 PM. Reply YES, I can't make it, or say if you're running late.";
+  "🌊 Sunrise reminder: Weekly General Meeting is tomorrow at 6:30 PM. Reply YES, I can't make it, or say if you're running late.";
 const FALLBACK_TIME =
-  "Which time works better for Sample Meeting — 6:30 or 8:30?";
+  "Which time works better for Weekly General Meeting — 6:30 or 8:30?";
 const FALLBACK_FOOD =
-  "Food check for Sample Meeting: how was it, or what should we order next time?";
+  "Food check for Weekly General Meeting: how was it, or what should we order next time?";
 
 /**
  * Structured keywords first → Gemini NLU for messy replies → Dewey chat.

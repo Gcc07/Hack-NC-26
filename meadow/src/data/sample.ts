@@ -1,6 +1,9 @@
 import type { DemoState } from "./types.ts";
 
-/** Fixed IDs for local testing when the Flask backend has no matching records yet. */
+/**
+ * Fixed IDs shared with Flask + browser seedDemo (Alex Kim / Weekly General Meeting).
+ * iMessage RSVPs patch /api/events/evt_sample_meeting.plans[mem_alex].
+ */
 export const SAMPLE = {
   orgId: "org_demo",
   eventId: "evt_sample_meeting",
@@ -13,7 +16,7 @@ export function createSampleState(): DemoState {
     organizations: {
       [SAMPLE.orgId]: {
         id: SAMPLE.orgId,
-        name: "Demo Org",
+        name: "Sunrise Service Society",
         memberIds: [SAMPLE.memberId],
       },
     },
@@ -21,7 +24,7 @@ export function createSampleState(): DemoState {
       [SAMPLE.eventId]: {
         id: SAMPLE.eventId,
         orgId: SAMPLE.orgId,
-        title: "Sample Meeting",
+        title: "Weekly General Meeting",
         scheduledLabel: "tomorrow at 6:30 PM",
         rsvps: {},
         meetingTimeVotes: {},
@@ -31,7 +34,7 @@ export function createSampleState(): DemoState {
     members: {
       [SAMPLE.memberId]: {
         id: SAMPLE.memberId,
-        name: "Alex",
+        name: "Alex Kim",
         orgId: SAMPLE.orgId,
         phone: null,
         spaceId: null,
