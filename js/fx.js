@@ -389,7 +389,7 @@
     const popped = tryPop(e.clientX, e.clientY);
     const interactive = !!(e.target.closest && e.target.closest(INTERACTIVE));
     if (popped) { burst(e.clientX, e.clientY, 9); fx.play('pop'); }
-    else if (interactive) burst(e.clientX, e.clientY, 3);
+
   }, true);
 
   document.addEventListener('click', (e) => {
@@ -403,15 +403,10 @@
     if (reduced || !window.gsap) return;
     const q = (s) => root.querySelectorAll(s);
     const heroes = q('.login-hero > *');
-    if (heroes.length) gsap.from(heroes, { x: -46, opacity: 0, duration: 0.8, stagger: 0.09, ease: 'back.out(1.5)', clearProps: 'all' });
+    if (heroes.length) gsap.from(heroes, { y: 8, opacity: 0, duration: 0.3, stagger: 0.03, ease: 'power2.out', clearProps: 'all' });
     const card = q('.login-card');
-    if (card.length) gsap.from(card, { x: 60, opacity: 0, scale: 0.94, duration: 0.85, delay: 0.15, ease: 'back.out(1.4)', clearProps: 'all' });
-    const rail = q('.rail-btn');
-    if (rail.length) gsap.from(rail, { scale: 0, opacity: 0, duration: 0.55, stagger: 0.05, ease: 'back.out(2.6)', clearProps: 'all' });
-    const win = q('.window');
-    if (win.length) gsap.from(win, { y: 16, opacity: 0, duration: 0.45, ease: 'power2.out', clearProps: 'all' });
-    const items = Array.from(q(ENTER_ITEMS)).slice(0, 16);
-    if (items.length) gsap.from(items, { y: 22, opacity: 0, scale: 0.97, duration: 0.55, delay: 0.12, stagger: 0.055, ease: 'back.out(1.4)', clearProps: 'all' });
+    if (card.length) gsap.from(card, { y: 8, opacity: 0, duration: 0.3, ease: 'power2.out', clearProps: 'all' });
+
   }
 
   /* ================================================================== newest chat messages pop in */
