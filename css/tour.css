@@ -1,0 +1,34 @@
+/* Meadow — guided tutorial spotlight (js/tour.js). Never blocks clicks on the app. */
+#tour-layer { position: fixed; inset: 0; z-index: 70; pointer-events: none; }
+#tour-layer[hidden], .tour-ring[hidden] { display: none; }
+
+.tour-ring {
+  position: fixed; border-radius: 14px; pointer-events: none;
+  box-shadow: 0 0 0 3px #ffd54a, 0 0 22px 6px rgba(255, 213, 74, 0.65), 0 0 0 200vmax rgba(8, 32, 64, 0.28);
+  transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease;
+}
+.tour-ring::after {
+  content: ""; position: absolute; inset: -3px; border-radius: inherit; border: 3px solid #ffd54a;
+  animation: tour-pulse 1.4s ease-out infinite;
+}
+@keyframes tour-pulse { from { opacity: 0.9; transform: scale(1); } to { opacity: 0; transform: scale(1.12); } }
+
+.tour-card {
+  position: fixed; width: min(340px, calc(100vw - 24px)); padding: 12px 14px; pointer-events: auto;
+  border-radius: var(--radius); background: var(--glass-strong); color: var(--ink); box-shadow: var(--shadow);
+  transition: left 0.25s ease, top 0.25s ease;
+}
+.tour-card.compact { width: auto; min-width: 220px; }
+.tour-top { display: flex; align-items: center; gap: 8px; }
+.tour-top strong { flex: 1; }
+.tour-count { font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.tour-text { margin: 8px 0 4px; line-height: 1.4; }
+.tour-wait[hidden] { display: none; }
+.tour-hint { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: var(--blue-2); }
+.tour-nav { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.tour-nav .spacer { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-ring, .tour-card { transition: none; }
+  .tour-ring::after { animation: none; }
+}

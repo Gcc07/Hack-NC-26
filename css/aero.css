@@ -714,3 +714,8 @@ body { -webkit-text-stroke: 0; letter-spacing: .01em; }
 .role { padding: 17px; margin-bottom: 13px; }
 .wave { animation: none; }
 @media(max-width:760px) { .pad { padding: 15px; } .org-head { padding: 15px 14px 0; } .org-title h1 { font-size: 22px; } .login-hero .meadow-tagline { font-size: 33px; } }
+
+/* Profile: stacked button rows get breathing room, and buttons shrink/wrap instead of spilling out of their card. */
+.profile-page .row + .row, .profile-page label + .row { margin-top: 10px; }
+.profile-page .row.wrap { gap: 8px; }
+.profile-page .row.wrap .btn { flex: 0 1 auto; max-width: 100%; min-width: 0; white-space: normal; text-align: center; line-height: 1.25; }

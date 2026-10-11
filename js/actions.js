@@ -457,6 +457,46 @@
   };
 
   /* ------------------------------------------------------------------ demo cast */
+  const CLASS_SLOTS = [[8, 0, 9, 15], [9, 30, 10, 45], [11, 0, 12, 15], [12, 30, 13, 45], [14, 0, 15, 15], [15, 30, 16, 45]];
+
+  /** A believable, repeatable class schedule (MWF + TR) for the next five weeks, seeded by name. */
+  function classBusy(name, today0) {
+    const rnd = M.rng(M.hashHue(name) * 977 + 13);
+    const pick = (n) => {
+      const set = new Set();
+      while (set.size < n) set.add(Math.floor(rnd() * CLASS_SLOTS.length));
+      return [...set].map((k) => CLASS_SLOTS[k]);
+    };
+    const mwf = pick(2 + Math.floor(rnd() * 2));
+    const tr = pick(2);
+    const busy = [];
+    for (let d = -1; d < 35; d++) {
+      const day0 = M.addDays(today0, d);
+      const wd = new Date(day0).getDay();
+      const set = wd === 1 || wd === 3 || wd === 5 ? mwf : wd === 2 || wd === 4 ? tr : [];
+      set.forEach(([h1, m1, h2, m2]) => busy.push([new Date(day0).setHours(h1, m1, 0, 0), new Date(day0).setHours(h2, m2, 0, 0)]));
+      if (rnd() < 0.22) {
+        const st = 17 + Math.floor(rnd() * 3);
+        busy.push([new Date(day0).setHours(st, 0, 0, 0), new Date(day0).setHours(st + 2, 0, 0, 0)]);
+      }
+      if ((wd === 6 || wd === 0) && rnd() < 0.2) busy.push([new Date(day0).setHours(12, 0, 0, 0), new Date(day0).setHours(16, 0, 0, 0)]);
+    }
+    return busy;
+  }
+
+  /** Weekly blocks beyond classes: [weekdays, startHour, endHour], e.g. a job or practice. */
+  function weeklyBusy(today0, blocks) {
+    const busy = [];
+    for (let d = -1; d < 35; d++) {
+      const day0 = M.addDays(today0, d);
+      const wd = new Date(day0).getDay();
+      blocks.forEach(([days, h1, h2]) => {
+        if (days.includes(wd)) busy.push([new Date(day0).setHours(Math.floor(h1), (h1 % 1) * 60, 0, 0), new Date(day0).setHours(Math.floor(h2), (h2 % 1) * 60, 0, 0)]);
+      });
+    }
+    return busy;
+  }
+
   A.seedDemo = function () {
     const now = Date.now();
     const today0 = M.startOfDay(now);
@@ -476,7 +516,6 @@
       { name: 'Noor Haddad', role: 'Member', presence: 'offline', away: 'back Monday' },
       { name: 'Theo Martin', role: 'Member', presence: 'online', away: 'free after 6!' },
     ];
-    const slots = [[8, 0, 9, 15], [9, 30, 10, 45], [11, 0, 12, 15], [12, 30, 13, 45], [14, 0, 15, 15], [15, 30, 16, 45]];
 
     let orgId;
     const ids = {};
@@ -491,9 +530,9 @@
       } : null;
       const keptGuest = s.guestbook.filter((g) => g.eventId === 'evt_sample_meeting');
 
-      // remove an older demo, if any
-      Object.values(s.users).filter((u) => u.demo).forEach((u) => delete s.users[u.id]);
-      Object.values(s.orgs).filter((o) => o.demo).forEach((o) => {
+      // remove an older demo, if any (the tutorial org is seeded separately)
+      Object.values(s.users).filter((u) => u.demo && !u.demoSet).forEach((u) => delete s.users[u.id]);
+      Object.values(s.orgs).filter((o) => o.demo && !o.demoSet).forEach((o) => {
         Object.values(s.events).filter((e) => e.orgId === o.id).forEach((e) => {
           delete s.events[e.id];
           s.guestbook = s.guestbook.filter((g) => g.eventId !== e.id);
@@ -503,26 +542,7 @@
       });
 
       cast.forEach((p, i) => {
-        const rnd = M.rng(M.hashHue(p.name) * 977 + 13);
-        const pick = (n) => {
-          const set = new Set();
-          while (set.size < n) set.add(Math.floor(rnd() * slots.length));
-          return [...set].map((k) => slots[k]);
-        };
-        const mwf = pick(2 + Math.floor(rnd() * 2));
-        const tr = pick(2);
-        const busy = [];
-        for (let d = -1; d < 35; d++) {
-          const day0 = M.addDays(today0, d);
-          const wd = new Date(day0).getDay();
-          const set = wd === 1 || wd === 3 || wd === 5 ? mwf : wd === 2 || wd === 4 ? tr : [];
-          set.forEach(([h1, m1, h2, m2]) => busy.push([new Date(day0).setHours(h1, m1, 0, 0), new Date(day0).setHours(h2, m2, 0, 0)]));
-          if (rnd() < 0.22) {
-            const st = 17 + Math.floor(rnd() * 3);
-            busy.push([new Date(day0).setHours(st, 0, 0, 0), new Date(day0).setHours(st + 2, 0, 0, 0)]);
-          }
-          if ((wd === 6 || wd === 0) && rnd() < 0.2) busy.push([new Date(day0).setHours(12, 0, 0, 0), new Date(day0).setHours(16, 0, 0, 0)]);
-        }
+        const busy = classBusy(p.name, today0);
         // Stable ids so iMessage (meadow) can write plans onto the same Flask rows the org UI reads.
         const id = p.name === 'Alex Kim' ? 'mem_alex' : M.uid('u');
         ids[p.name] = id;
@@ -614,5 +634,142 @@
       });
     });
     return { orgId, ids };
+  };
+  /* ------------------------------------------------------------------ tutorial org: Student Government */
+  A.SGA_ORG = 'org_sga';
+  A.SGA_HOMECOMING = 'evt_sga_homecoming';
+
+  /** Seed (or reset) the Student Government org used by the guided tutorial, with `meId` as President. */
+  A.seedStudentGov = function (meId) {
+    const now = Date.now();
+    const today0 = M.startOfDay(now);
+    const dow = new Date(now).getDay();
+    const nextDow = (target, hour, min) => {
+      let delta = (target - dow + 7) % 7;
+      if (delta === 0) delta = 7;
+      return new Date(M.addDays(today0, delta)).setHours(hour, min || 0, 0, 0);
+    };
+    const orgId = A.SGA_ORG;
+    // [name, role, presence, away message, calendar name, weekly blocks beyond classes]
+    const cast = [
+      ['Jasmine Okoye', 'Vice President', 'online', 'town hall prep 📝', 'Classes + campus job', [[[2, 4], 17, 20]]],
+      ['Marcus Lee', 'Treasurer', 'away', 'budget spreadsheets 📊', 'Classes + chem lab', [[[3], 13, 17]]],
+      ['Hannah Park', 'Secretary', 'online', '', 'Fall classes', []],
+      ['Diego Alvarez', 'Events Chair', 'online', 'homecoming mode 🎉', 'Classes + RA duty', [[[0, 4], 20, 23]]],
+      ['Aisha Rahman', 'Member', 'online', 'free after 4!', 'Fall classes', []],
+      ['Ben Carter', 'Member', 'away', 'at practice ⚽', 'Classes + soccer practice', [[[1, 2, 3, 4, 5], 15.5, 17.5]]],
+      ['Chloe Nguyen', 'Member', 'online', '', 'Classes + weekend shifts', [[[6], 10, 16]]],
+      ['Ethan Brooks', 'Member', 'offline', 'back Monday', 'Fall classes', []],
+      ['Fatima Ali', 'Member', 'online', 'in the library', 'Classes + bio lab', [[[2], 13, 17]]],
+      ['Grace Kim', 'Member', 'away', 'midterm szn', 'Classes + tutoring', [[[1, 3], 18, 20]]],
+      ['Liam O’Connor', 'Member', 'online', '', 'Classes + band rehearsal', [[[2, 4], 19, 21]]],
+    ];
+    const ids = {};
+    cast.forEach(([name]) => (ids[name] = 'sga_' + name.split(' ')[0].toLowerCase()));
+
+    M.store.update((s) => {
+      // Reset an earlier copy so the tutorial always starts from the same story.
+      const oldEvents = new Set(Object.values(s.events).filter((e) => e.orgId === orgId).map((e) => e.id));
+      const oldUsers = new Set(Object.values(s.users).filter((u) => u.demoSet === 'sga').map((u) => u.id));
+      oldEvents.forEach((id) => delete s.events[id]);
+      oldUsers.forEach((id) => delete s.users[id]);
+      Object.values(s.flares).filter((f) => oldEvents.has(f.eventId)).forEach((f) => delete s.flares[f.id]);
+      s.guestbook = s.guestbook.filter((g) => !oldEvents.has(g.eventId));
+      s.messages = s.messages.filter((m) => m.channel !== 'org:' + orgId && !oldEvents.has(m.channel.split(':')[1])
+        && !(m.channel.startsWith('dm:') && m.channel.split(':').some((id) => oldUsers.has(id))));
+      s.friendships = s.friendships.filter((f) => !oldUsers.has(f.a) && !oldUsers.has(f.b));
+
+      cast.forEach(([name, , presence, away, calName, extra]) => {
+        const id = ids[name];
+        const busy = M.mergeIntervals(classBusy(name, today0).concat(weeklyBusy(today0, extra)));
+        s.users[id] = {
+          id, name, email: name.split(' ')[0].toLowerCase() + '@sga.demo.meadow', createdAt: now, demo: true, demoSet: 'sga',
+          busy, statusBusy: [], calendar: { source: 'demo', name: calName, importedAt: now, count: busy.length },
+          bridgeOptIn: {}, presence: presence === 'offline' ? 'online' : presence, demoPresence: presence, away, lastSeen: 0,
+          phone: '', imessageOptIn: false, imessageError: '',
+        };
+      });
+
+      const me = s.users[meId];
+      if (me && !M.hasShared(me)) {
+        // The presenter needs a calendar too, or the heatmap reports them as unknown.
+        const busy = M.mergeIntervals(classBusy(me.name || 'you', today0));
+        me.busy = busy;
+        me.calendar = { source: 'demo', name: 'Demo class schedule', importedAt: now, count: busy.length };
+      }
+
+      const org = {
+        id: orgId, name: 'Student Government Association', emoji: '🏛️', inviteCode: 'SGA', createdAt: now, demo: true, demoSet: 'sga',
+        members: {}, bridge: { type: 'none', botId: '' }, handoff: null,
+      };
+      cast.forEach(([name, role], i) => (org.members[ids[name]] = { role, joinedAt: now - (60 - i) * DAY }));
+      if (me) org.members[meId] = { role: 'President', joinedAt: now - 90 * DAY };
+      s.orgs[orgId] = org;
+
+      const mkEvent = (id, title, type, loc, start, end, roles, extra) => {
+        const ev = {
+          id, orgId, title, type, location: loc, description: '', start, end, status: 'pending', createdBy: ids['Diego Alvarez'],
+          createdAt: now - 4 * DAY, checkinCode: 'SGA-' + Math.floor(1000 + Math.random() * 9000), attendance: [],
+          roles: roles.map((r, i) => ({ id: id + '_r' + i, name: r[0], required: r[1], headcount: r[2], offsetMin: r[3], durationMin: r[4], anchor: r[5] || 'start', claims: (r[6] || []).map((n) => ids[n]) })),
+          plans: {}, imessage: {}, meetingTimeVotes: {}, foodFeedback: {},
+          ...extra,
+        };
+        M.recomputeStatus(ev);
+        s.events[ev.id] = ev;
+        return ev;
+      };
+
+      const fri = nextDow(5, 11);
+      const homecoming = mkEvent(A.SGA_HOMECOMING, 'Homecoming Tabling', 'Tabling', 'Main Quad', fri, fri + 4 * HOUR, [
+        ['Setup', true, 2, -60, 60, 'start', ['Diego Alvarez']],
+        ['Tabling (shift 1)', true, 2, 0, 120, 'start', ['Aisha Rahman', 'Chloe Nguyen']],
+        ['Tabling (shift 2)', true, 2, 120, 120, 'start', ['Fatima Ali']],
+        ['Food pickup', true, 1, -45, 45, 'start', []],
+        ['Cleanup', false, 2, 0, 30, 'end', []],
+      ], { description: 'Homecoming week booth: hand out SGA swag, collect town hall questions, and sign students up for committees.' });
+      const wed = nextDow(3, 18);
+      const townHall = mkEvent('evt_sga_townhall', 'Student Town Hall', 'Meeting', 'Union Ballroom', wed, wed + 90 * MIN, [
+        ['Setup', true, 2, -45, 45, 'start', ['Ethan Brooks', 'Grace Kim']],
+        ['Greeter', true, 1, 0, 60, 'start', ['Hannah Park']],
+        ['Mic runner', true, 2, 0, 90, 'start', ['Liam O’Connor']],
+      ], { description: 'Open forum with the Dean of Students. Students bring questions about dining, parking and housing.' });
+      const mon = nextDow(1, 19);
+      mkEvent('evt_sga_senate', 'Weekly Senate Meeting', 'Meeting', 'Senate Chambers', mon, mon + HOUR, []);
+      const tue = nextDow(2, 17);
+      mkEvent('evt_sga_budget', 'Budget Committee', 'Meeting', 'Union 210', tue, tue + HOUR, []);
+      const past = new Date(M.addDays(today0, -5)).setHours(18, 0, 0, 0);
+      const mixer = mkEvent('evt_sga_mixer', 'Club Leaders Mixer', 'Social', 'Union Terrace', past, past + 2 * HOUR, [
+        ['Setup', true, 2, -45, 45, 'start', ['Diego Alvarez', 'Ben Carter']],
+        ['Greeter', true, 1, 0, 60, 'start', ['Hannah Park']],
+      ]);
+      mixer.attendance = ['Diego Alvarez', 'Ben Carter', 'Hannah Park', 'Jasmine Okoye', 'Marcus Lee', 'Aisha Rahman', 'Grace Kim'].map((n) => ids[n]);
+      [
+        ['Marcus Lee', 'We spent $212 of the $300 budget. Pizza for 60 was the right amount.'],
+        ['Hannah Park', '40 club leaders came. Next time put the sign-in sheet by the door, not the food table.'],
+      ].forEach(([n, t], i) => s.guestbook.push({ id: M.uid('g'), eventId: mixer.id, userId: ids[n], text: t, ts: past + (3 + i) * HOUR }));
+
+      const say = (n, t, ago) => s.messages.push({ id: M.uid('m'), channel: 'org:' + orgId, userId: ids[n], text: t, ts: now - ago * MIN, source: 'app', payload: null });
+      const dewey = (t, ago, payload) => s.messages.push({ id: M.uid('m'), channel: 'org:' + orgId, userId: null, text: t, ts: now - ago * MIN, source: 'assistant', payload: payload || null });
+      dewey('Welcome to **Student Government Association**! I’m Dewey. Everyone here shared their calendar, so I can find times that work. Try “@dewey find a time for a 1 hour town hall dry run next week”.', 600);
+      say('Jasmine Okoye', 'Homecoming tabling is Friday! We still need someone on food pickup and a second person for shift 2.', 300);
+      say('Diego Alvarez', 'I’ve got setup. Aisha and Chloe are on shift 1 🙌', 270);
+      say('Marcus Lee', 'Reminder: club budget requests are due before Budget Committee on Tuesday.', 200);
+      dewey('📅 Homecoming Tabling is pending: ' + M.plural(M.eventProgress(homecoming).open, 'required spot') + ' still open.', 180, { type: 'event', eventId: homecoming.id });
+      say('Hannah Park', 'Town hall agenda draft is in the shared drive. Can we find a time for a dry run before Wednesday?', 90);
+      say('Grace Kim', 'Who’s free to run a mic at the town hall? We need one more.', 40);
+      dewey('📅 Student Town Hall needs one more mic runner.', 35, { type: 'event', eventId: townHall.id });
+
+      s.friendships.push({ a: ids['Jasmine Okoye'], b: ids['Hannah Park'] }, { a: ids['Diego Alvarez'], b: ids['Aisha Rahman'] });
+
+      // Scripted claims (and the presenter's open shifts) should not clash with scripted classes.
+      Object.values(s.events).filter((ev) => ev.orgId === orgId).forEach((ev) => ev.roles.forEach((r) => {
+        const [rs, re] = M.roleShift(ev, r);
+        r.claims.concat(me && me.calendar && me.calendar.source === 'demo' ? [meId] : []).forEach((uid) => {
+          const u = s.users[uid];
+          if (u) u.busy = u.busy.filter((b) => !(b[0] < re && b[1] > rs));
+        });
+      }));
+    });
+    return orgId;
   };
 })();

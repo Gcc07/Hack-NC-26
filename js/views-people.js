@@ -271,7 +271,7 @@
     const people = Object.values(state.users).filter((u) => u.id !== me.id && !u.placeholder);
     const friends = M.friendsOf(me.id).map((id) => state.users[id]);
 
-    return h('div', { class: 'main-scroll pad two-col', 'data-scroll': 'main' },
+    return h('div', { class: 'main-scroll pad two-col profile-page', 'data-scroll': 'main' },
       h('div', null,
         h('section', { class: 'card' },
           h('div', { class: 'row tight' }, M.avatar(me, 56), h('div', null, h('h1', null, me.name), h('p', { class: 'hint' }, me.email || 'No email on file')))),

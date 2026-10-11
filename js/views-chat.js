@@ -68,7 +68,7 @@
 
     if (p.type === 'suggestions') {
       const isOfficer = M.isOfficer(org, me.id);
-      return h('div', { class: 'msg-card sugg' },
+      return h('div', { class: 'msg-card sugg', 'data-tour': 'sugg' },
         p.results.map((r, i) =>
           h('div', { class: 'sugg-row' },
             h('div', { class: 'score', title: 'Score from the deterministic scheduler' }, h('b', null, r.score), h('small', null, '/100')),
@@ -171,7 +171,7 @@
             quick('folder', 'Summarize', '@dewey summarize', true),
             quick('drop', 'Help', '@dewey help', true))
         : null,
-      h('form', { class: 'chat-form', onSubmit: send }, input, h('button', { class: 'btn primary', type: 'submit' }, 'Send')));
+      h('form', { class: 'chat-form', onSubmit: send }, input, h('button', { class: 'btn primary', type: 'submit', 'data-tour': 'chat-send' }, 'Send')));
   };
 
   /* ---------------------------------------------------------------- tab */
@@ -203,7 +203,7 @@
     }
 
     return h('div', { class: 'chat-layout' },
-      h('aside', { class: 'channels', 'aria-label': 'Channels' },
+      h('aside', { class: 'channels', 'aria-label': 'Channels', 'data-tour': 'channels' },
         h('h3', null, 'Channels'),
         chBtn('org:' + org.id, '# general'),
         events.length ? h('h3', null, 'Events') : null,

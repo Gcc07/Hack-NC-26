@@ -38,7 +38,7 @@
         })));
     }
 
-    return h('section', { class: 'card' },
+    return h('section', { class: 'card', 'data-tour': 'heatmap' },
       h('div', { class: 'row between wrap' },
         h('h2', null, '🌤️ Who’s free'),
         h('div', { class: 'row tight' },
@@ -115,7 +115,7 @@
       sel([['', '+ add role…'], ...Object.keys(M.ROLE_TEMPLATES).map((k) => [k, k])], '', (v) => { if (v) { c.roles.push({ name: v, ...M.ROLE_TEMPLATES[v] }); M.render(); } }, 'Add role'));
 
     const results = sc.results
-      ? h('div', { class: 'results' },
+      ? h('div', { class: 'results', 'data-tour': 'results' },
           h('h3', null, sc.results.length ? `Top ${sc.results.length} times` : 'No times found'),
           sc.stats ? h('p', { class: 'hint' }, `Checked ${sc.stats.considered} possible slots against ${M.plural(sc.stats.known, 'member')}’ free/busy.`) : null,
           !sc.results.length ? h('p', { class: 'notice' }, 'Nothing fits. Try widening the days, hours, or window — or drop a required role.') : null,
@@ -126,7 +126,7 @@
       h('div', { class: 'row tight' }, M.deweySvg(40), h('h2', null, 'Ask Dewey for a time')),
       h('p', { class: 'hint' }, 'Describe it in plain words, then tweak the details. Dewey proposes; officers decide. Scores come from a deterministic scheduler — no guessing.'),
       ask,
-      h('div', { class: 'row' }, h('button', { class: 'btn primary', onClick: askDewey }, M.icon('drop', 19), 'Ask Dewey'), M.AI.llmEnabled() ? h('span', { class: 'chip free' }, 'Gemini on') : h('span', { class: 'hint' }, 'Offline language parser (set GEMINI_API_KEY in .env to upgrade)')),
+      h('div', { class: 'row' }, h('button', { class: 'btn primary', 'data-tour': 'ask-dewey', onClick: askDewey }, M.icon('drop', 19), 'Ask Dewey'), M.AI.llmEnabled() ? h('span', { class: 'chip free' }, 'Gemini on') : h('span', { class: 'hint' }, 'Offline language parser (set GEMINI_API_KEY in .env to upgrade)')),
       sc.understood.length ? h('div', { class: 'understood' }, h('small', null, 'Dewey understood: '), sc.understood.map((u) => h('span', { class: 'chip' }, u))) : null,
       form,
       rolesBox,

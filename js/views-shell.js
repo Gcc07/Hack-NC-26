@@ -231,7 +231,7 @@
     const shifts = events.flatMap(e => e.roles.filter(r => r.claims.includes(me.id)).map(r => ({event:e, role:r, times:M.roleShift(e,r)}))).filter(s => s.times[1] > now).sort((a,b) => a.times[0]-b.times[0]);
     const shift = shifts[0];
     const link = (e, label) => h('a', {class:'btn small', href:'#/o/'+e.orgId+'/events/'+e.id}, label);
-    return h('section', {class:'focus-section'},
+    return h('section', {class:'focus-section', 'data-tour':'focus'},
       h('div', {class:'section-heading'}, h('h2', null, 'Your meadow, at a glance'), h('p', {class:'hint'}, 'A little less planning. A little more coming together.')),
       h('div', {class:'focus-grid'},
         h('article', {class:'card focus-card'}, h('span', {class:'eyebrow'}, M.icon('calendar'), 'Next event'), h('h3', null, next ? next.title : 'Room for a new idea'), h('p', null, next ? M.fmt.range(next.start,next.end) : 'Your upcoming events will appear here.'), next ? link(next,'View event') : null),
@@ -242,7 +242,7 @@
   V.home = function (orgs) {
     const me = M.me();
     const state = S();
-    const hasDemo = Object.values(state.orgs).some((o) => o.demo);
+    const hasDemo = Object.values(state.orgs).some((o) => o.demo && !o.demoSet);
     const steps = [
       [!!me.calendar, 'Share your availability', 'Import an .ics file (or connect Google Calendar). Only busy times are kept.', () => M.go('#/me')],
       [orgs.length > 0, 'Join or create an org', 'Use an invite link from your officers, or start your own.', () => V.orgModal()],
@@ -285,7 +285,8 @@
             M.store.update((s) => { s.orgs[orgId].members[me.id] = { role: 'Events Chair', joinedAt: Date.now() }; });
             M.go('#/o/' + orgId + '/chat');
             M.toast('Demo org loaded — you are Events Chair. Open other people in new tabs from the buddy list!');
-          } }, hasDemo ? '↻ Reload demo org' : '✨ Load demo org')),
+          } }, hasDemo ? '↻ Reload demo org' : '✨ Load demo org'),
+          h('button', { class: 'btn', title: 'Seeds a Student Government org and highlights what to click on each page', onClick: () => M.tour.start('sga') }, '🎓 Start tutorial')),
       )
     );
     return h('div', { class: 'home-wrap' }, V.waveBackdrop(), page);
@@ -353,7 +354,7 @@
 
     return h(
       'aside',
-      { class: 'buddies glass', 'aria-label': 'Buddy list' },
+      { class: 'buddies glass', 'aria-label': 'Buddy list', 'data-tour': 'buddies' },
       h('div', { class: 'buddy-head' }, h('strong', { class: 'icon-label' }, V.buddyIcon(26), 'Buddy List'), h('span', { class: 'hint' }, 'who’s around')),
       h('div', { class: 'my-status' },
         h('div', { class: 'row tight' }, M.avatar(me, 28), h('strong', null, M.firstName(me.name)), presence),
@@ -378,7 +379,7 @@
     const openFlares = Object.values(state.flares).filter((f) => f.status === 'open' && state.events[f.eventId] && state.events[f.eventId].orgId === org.id).length;
     const tab = tabs.find((t) => t[0] === r.tab) ? r.tab : 'chat';
     let body;
-    if (tab === 'overview') body = h('div', { class: 'main-scroll pad' }, V.focusPanel([org]), h('section', { class: 'card' }, h('h2', null, 'Make something happen'), h('p', { class: 'hint' }, 'Share availability, agree on a time, and take a role. Dewey can help you plan.'), h('a', { class: 'btn', href: '#/o/' + org.id + '/schedule' }, M.icon('calendar'), 'Find a time')));
+    if (tab === 'overview') body = h('div', { class: 'main-scroll pad' }, V.focusPanel([org]), h('section', { class: 'card' }, h('h2', null, 'Make something happen'), h('p', { class: 'hint' }, 'Share availability, agree on a time, and take a role. Dewey can help you plan.'), h('a', { class: 'btn', href: '#/o/' + org.id + '/schedule', 'data-tour': 'find-time' }, M.icon('calendar'), 'Find a time')));
     else if (tab === 'chat') body = V.chatTab(org);
     else if (tab === 'events') body = V.eventsTab(org);
     else if (tab === 'schedule') body = V.scheduleTab(org);
@@ -392,7 +393,7 @@
         h('div', { class: 'org-title' }, h('span', { class: 'org-emoji sm' }, org.emoji), h('h1', null, org.name), h('span', { class: 'pill' }, org.members[me.id].role)),
         h('div', { class: 'tabs', role: 'tablist' },
           tabs.map(([k, icon, label]) =>
-            h('a', { class: 'tab' + (tab === k ? ' active' : ''), role: 'tab', 'aria-selected': tab === k ? 'true' : 'false', href: '#/o/' + org.id + '/' + k },
+            h('a', { class: 'tab' + (tab === k ? ' active' : ''), 'data-tour': 'tab-' + k, role: 'tab', 'aria-selected': tab === k ? 'true' : 'false', href: '#/o/' + org.id + '/' + k },
               M.icon(icon, 21), label, k === 'board' && openFlares ? h('span', { class: 'badge' }, openFlares) : null)))),
       h('div', { class: 'org-body ' + tab }, body)
     );

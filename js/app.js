@@ -32,7 +32,8 @@
     else if (parts[0] === 'join' && parts[1]) {
       r.name = 'join';
       r.code = parts[1];
-    } else if (parts[0] === 'as' && parts[1]) {
+    } else if (parts[0] === 'tour') r.name = 'tour';
+    else if (parts[0] === 'as' && parts[1]) {
       r.name = 'as';
       r.userId = parts[1];
     }
@@ -41,6 +42,10 @@
 
   function handleSpecialRoutes() {
     const r = M.ui.route;
+    if (r.name === 'tour') {
+      M.tour.start('sga', true);
+      return true;
+    }
     if (r.name === 'as') {
       // Only demo cast members can be borrowed; real people are behind their own logins.
       const u = S().users[r.userId];
@@ -240,6 +245,11 @@
     M.render();
     await M.store.init();
     if (M.store.ready()) M.safe(M.act.heartbeat);
+    if (sessionStorage.getItem('meadow:pendingTour')) {
+      sessionStorage.removeItem('meadow:pendingTour');
+      location.hash = '#/tour';
+      return;
+    }
     const pending = sessionStorage.getItem('meadow:pendingJoin');
     if (pending) {
       sessionStorage.removeItem('meadow:pendingJoin');
@@ -256,6 +266,8 @@
   function onRoute() {
     parseHash();
     if (!M.auth.account && M.ui.route.name === 'join') sessionStorage.setItem('meadow:pendingJoin', M.ui.route.code);
+    // #/tour opened before signing in (or before a Google redirect) starts once the user is in.
+    if (!M.auth.account && M.ui.route.name === 'tour') sessionStorage.setItem('meadow:pendingTour', '1');
     if (!M.auth.account || !M.store.ready()) { M.render(); return; }
     if (handleSpecialRoutes()) return;
     M.render();
@@ -281,9 +293,13 @@
       if (pendingJoin) {
         sessionStorage.removeItem('meadow:pendingJoin');
         location.replace('#/join/' + pendingJoin);
+      } else if (sessionStorage.getItem('meadow:pendingTour')) {
+        sessionStorage.removeItem('meadow:pendingTour');
+        location.replace('#/tour');
       }
     }
     onRoute();
+    if (M.store.ready() && M.ui.route.name !== 'tour') M.tour.resume();
     if (M.store.ready()) M.safe(M.act.heartbeat);
     setInterval(() => { if (M.auth.account && M.store.ready()) M.safe(M.act.heartbeat); }, 20000);
     setInterval(() => {

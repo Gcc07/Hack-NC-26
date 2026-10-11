@@ -27,7 +27,7 @@
 
     return h('div', { class: 'main-scroll pad', 'data-scroll': 'main' },
       h('div', { class: 'row between wrap' },
-        h('div', { class: 'seg', role: 'group', 'aria-label': 'Filter events' },
+        h('div', { class: 'seg', role: 'group', 'aria-label': 'Filter events', 'data-tour': 'ev-filter' },
           Object.keys(labels).map((k) => h('button', { class: 'seg-btn' + (cur === k ? ' active' : ''), 'aria-pressed': cur === k ? 'true' : 'false', onClick: () => { M.ui.evFilter = k; M.render(); } },
             labels[k] + ' ', h('small', null, all.filter(filters[k]).length)))),
         M.isOfficer(org, me.id)
@@ -48,7 +48,7 @@
         + plans.filter((p) => p.status === 'late').length + ' late · '
         + plans.filter((p) => p.status === 'cant').length + " can't"
       : null;
-    return h('a', { class: 'event-card status-' + ev.status, href: '#/o/' + ev.orgId + '/events/' + ev.id },
+    return h('a', { class: 'event-card status-' + ev.status, 'data-tour': 'ev-' + ev.id, href: '#/o/' + ev.orgId + '/events/' + ev.id },
       h('div', { class: 'row between' }, h('span', { class: 'pill' }, ev.type), statusPill(ev)),
       h('h3', null, ev.title),
       h('div', { class: 'event-date icon-label' }, M.icon('calendar'), M.fmt.range(ev.start, ev.end)),
@@ -111,7 +111,7 @@
         h('div', { class: 'role-actions' },
           cancelled ? null : iHave
             ? h('button', { class: 'btn small', onClick: () => M.confirm(`Release your ${role.name} spot? A flare will go out so someone else can pick it up.`, () => M.safe(() => M.act.releaseRole(ev.id, role.id, me.id))) }, 'Release')
-            : h('button', { class: 'btn small primary', disabled: full, onClick: () => V.claimWithCheck(ev, role, me) }, M.icon('leaf', 19), full ? 'Full' : 'Claim'),
+            : h('button', { class: 'btn small primary', disabled: full, 'data-tour': full ? null : 'claim:' + role.name, onClick: () => V.claimWithCheck(ev, role, me) }, M.icon('leaf', 19), full ? 'Full' : 'Claim'),
           officer && !full && !cancelled && !openFlare
             ? h('button', { class: 'btn small', title: 'Post a flare to the whole org', onClick: () => { M.act.sendFlare(ev.id, role.id, me.id); M.toast('Flare sent'); } }, M.icon('flower', 19), 'Flare')
             : null));
@@ -383,7 +383,7 @@
 
     return h('div', { class: 'main-scroll pad', 'data-scroll': 'main' },
       h('a', { class: 'back', href: '#/o/' + org.id + '/events' }, '← All events'),
-      h('div', { class: 'event-hero card' },
+      h('div', { class: 'event-hero card', 'data-tour': 'ev-hero' },
         h('div', { class: 'row between wrap' }, h('h2', null, ev.title), statusPill(ev)),
         h('p', null, '🕒 ' + M.fmt.range(ev.start, ev.end)),
         ev.location ? h('p', null, '📍 ' + ev.location) : null,
@@ -396,7 +396,7 @@
           officer && !cancelled ? h('button', { class: 'btn small danger', onClick: () => M.confirm('Cancel this event for everyone?', () => M.safe(() => M.act.cancelEvent(ev.id, me.id))) }, 'Cancel event') : null)),
       imsgActions,
       bridge,
-      h('section', { class: 'card' }, h('h2', { class: 'icon-label' }, M.icon('people'), 'Roles'),
+      h('section', { class: 'card', 'data-tour': 'roles' }, h('h2', { class: 'icon-label' }, M.icon('people'), 'Roles'),
         ev.roles.length ? ev.roles.map(roleRow) : h('p', { class: 'hint' }, 'This event has no roles — just show up!')),
       checkin, guest,
       h('section', { class: 'card chat-embed' }, V.chatPanel('event:' + ev.id, '💬 Event chat', org, { placeholder: 'Coordinate with the crew…' })));
