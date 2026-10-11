@@ -4,18 +4,7 @@
 
 /* Brand fonts (see Assets/fonts) */
 @font-face { font-family: "Aerobics"; src: url("../Assets/fonts/AerobicsRegular-mLRZP.ttf") format("truetype"); font-display: swap; }
-@font-face { font-family: "Myriad"; src: url("../Assets/fonts/MYRIADAT.TTF") format("truetype"); font-weight: 400; font-display: swap; } /* single weight: browser synthesizes bold; now only a fallback */
-/* Segoe Alt: body / UI text. Real light, semilight, regular, semibold and bold weights, so no faux bold. */
-@font-face { font-family: "Segoe Alt"; font-weight: 300; font-style: normal; font-display: swap; src: url("../Assets/fonts/segoe-alt-cufonfonts/SegoeAltLight.ttf") format("truetype"); }
-@font-face { font-family: "Segoe Alt"; font-weight: 300; font-style: italic; font-display: swap; src: url("../Assets/fonts/segoe-alt-cufonfonts/SegoeAltLightItalic.ttf") format("truetype"); }
-@font-face { font-family: "Segoe Alt"; font-weight: 350; font-style: normal; font-display: swap; src: url("../Assets/fonts/segoe-alt-cufonfonts/SegoeAltSemilight.ttf") format("truetype"); }
-@font-face { font-family: "Segoe Alt"; font-weight: 350; font-style: italic; font-display: swap; src: url("../Assets/fonts/segoe-alt-cufonfonts/SegoeAltSemilightItalic.ttf") format("truetype"); }
-@font-face { font-family: "Segoe Alt"; font-weight: 400; font-style: normal; font-display: swap; src: url("../Assets/fonts/segoe-alt-cufonfonts/SegoeAlt.ttf") format("truetype"); }
-@font-face { font-family: "Segoe Alt"; font-weight: 400; font-style: italic; font-display: swap; src: url("../Assets/fonts/segoe-alt-cufonfonts/SegoeAltItalic.ttf") format("truetype"); }
-@font-face { font-family: "Segoe Alt"; font-weight: 600; font-style: normal; font-display: swap; src: url("../Assets/fonts/segoe-alt-cufonfonts/SegoeAltSemibold.ttf") format("truetype"); }
-@font-face { font-family: "Segoe Alt"; font-weight: 600; font-style: italic; font-display: swap; src: url("../Assets/fonts/segoe-alt-cufonfonts/SegoeAltSemiboldItalic.ttf") format("truetype"); }
-@font-face { font-family: "Segoe Alt"; font-weight: 700 900; font-style: normal; font-display: swap; src: url("../Assets/fonts/segoe-alt-cufonfonts/SegoeAltBold.ttf") format("truetype"); }
-@font-face { font-family: "Segoe Alt"; font-weight: 700 900; font-style: italic; font-display: swap; src: url("../Assets/fonts/segoe-alt-cufonfonts/SegoeAltBoldItalic.ttf") format("truetype"); }
+@font-face { font-family: "Myriad"; src: url("../Assets/fonts/MYRIADAT.TTF") format("truetype"); font-weight: 400; font-display: swap; } /* single weight: browser synthesizes bold */
 :root {
   --ink: #0b2a4a;
   --ink-soft: #35536f;
@@ -33,7 +22,7 @@
   --glass-strong: rgba(255, 255, 255, 0.84);
   --radius: 16px;
   --shadow: 0 8px 24px rgba(11, 70, 130, 0.25), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
-  --font: "Segoe Alt", "Segoe UI", "Myriad", "Frutiger", "Trebuchet MS", Tahoma, Verdana, sans-serif;
+  --font: "Myriad", "Frutiger", "Segoe UI", "Trebuchet MS", Tahoma, Verdana, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -43,6 +32,8 @@ body {
   color: var(--ink);
   font-size: 16px;
   line-height: 1.45;
+  letter-spacing: 0.015em; /* Myriad's space glyph is narrow; a little tracking keeps words from running together */
+  -webkit-text-stroke: 0.35px currentColor;
   background: linear-gradient(180deg, #2c9bea 0%, #6cc6fb 45%, #bfeaff 100%) fixed;
   overflow: hidden;
 }
@@ -452,7 +443,7 @@ ul.plain { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 6
 @keyframes sun-pulse { from { opacity: .8; transform: scale(.97); } to { opacity: 1; transform: scale(1.04); } }
 @keyframes sun-rays { to { transform: rotate(360deg); } }
 
-/* 3D meadow under the clouds: a receding grass plane (classic Vista wallpaper) + layered hills */
+/* 3D meadow under the clouds: a receding grass plane (classic Vista wallpaper) + layered hills + a few blooms */
 #fx-meadow {
   inset: 0; z-index: 1; overflow: hidden;
   perspective: 920px; perspective-origin: 50% 58%;
@@ -479,6 +470,25 @@ ul.plain { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 6
 .hill { animation: hill-sway 14s ease-in-out infinite alternate; }
 .hill.h0 { animation-duration: 24s; } .hill.h1 { animation-duration: 19s; } .hill.h3 { animation-duration: 11s; animation-direction: alternate-reverse; }
 @keyframes hill-sway { from { transform: translateX(-14px); } to { transform: translateX(14px); } }
+#fx-flowers { position: absolute; left: 0; right: 0; bottom: 0; height: 22vh; }
+.bloom {
+  position: absolute; width: 18px; height: 28px;
+  transform: scale(var(--s, 1)); transform-origin: 50% 100%;
+  background:
+    radial-gradient(circle at 50% 22%, #ffe36b 0 28%, transparent 30%),
+    radial-gradient(circle at 50% 22%, #fff 0 10%, transparent 12%),
+    linear-gradient(180deg, transparent 38%, #2f9e2f 38% 100%);
+  filter: drop-shadow(0 1px 1px rgba(0,40,0,.25));
+  animation: bloom-sway 5s ease-in-out infinite alternate;
+}
+.bloom.b1 { width: 16px; height: 26px; background:
+  radial-gradient(circle at 50% 20%, #ffd24a 0 30%, transparent 32%),
+  linear-gradient(180deg, transparent 36%, #248a28 36% 100%); }
+.bloom.b2 { width: 12px; height: 20px; background:
+  radial-gradient(circle at 50% 24%, #fff6b0 0 26%, transparent 28%),
+  linear-gradient(180deg, transparent 40%, #3dbb4a 40% 100%); }
+@keyframes bloom-sway { from { transform: scale(var(--s, 1)) rotate(-6deg); } to { transform: scale(var(--s, 1)) rotate(7deg); } }
+
 .fx-off #fx-sky, .fx-off #fx-sun, .fx-off #fx-bubbles, .fx-off #fx-orbs { display: none; }
 
 /* effects + sound toggles: two little glass orbs, bottom-left */
@@ -562,34 +572,15 @@ body { -webkit-text-stroke: 0; letter-spacing: .01em; }
 .meadow-field { display: none; }
 .meadow-haze { bottom: 28vh; height: 24vh; background: radial-gradient(ellipse at center, #e7f6ce65, transparent 70%); }
 #fx-hills { height: 53vh; min-height: 270px; overflow: visible; }
+#fx-flowers { height: 14vh; }
 .wave-bg { width: 13vw; opacity: .32; }
 .login { max-width: 1280px; margin: auto; grid-template-columns: minmax(0,1fr) minmax(310px,390px); gap: clamp(28px,5vw,76px); padding: 48px clamp(28px,6vw,80px) 120px; align-content: center; }
 .hero-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 25px; }
 .hero-brand .wordmark { font-size: clamp(38px, 4.8vw, 52px); }
 .hero-brand .logo-img { border-radius: 15px; border-width: 2px; margin: 0; }
 .desktop-label { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #154661; margin-bottom: 15px; }
-.login-hero .hero-heading { font-family: var(--font); font-size: clamp(36px,4.2vw,59px); font-weight: 700; letter-spacing: -.055em; line-height: 1.04; color: #123d59; text-shadow: 0 2px 0 #ffffffa6; margin-bottom: 18px; }
-/* Logo montage: tightly packed tiles panning down and easing to a stop on the wide logo + tagline. */
-.login-hero { align-self: stretch; position: relative; min-height: clamp(440px, 76vh, 800px); }
-.reel { --tile-w: clamp(140px, 14vw, 210px); --span: min(44vh, 380px); position: absolute; inset: 0; overflow: hidden;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 84%, transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 84%, transparent 100%); }
-.reel-pending .reel-col { visibility: hidden; }
-.reel-col { position: absolute; left: 0; top: 50%; width: 100%; padding: 4px; transform: translateY(-50%); display: flex; flex-direction: column; gap: 10px; will-change: transform; }
-.reel-above { height: var(--span); display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; }
-.reel-below-box { height: var(--span); }
-.reel-below { display: flex; flex-direction: column; gap: 10px; }
-.reel-main-block { display: flex; flex-direction: column; gap: 14px; }
-.reel-tile { flex: none; display: block; width: var(--tile-w); height: auto; border-radius: 16px; border: 3px solid #fff; box-shadow: 0 3px 10px rgba(11,70,130,.4), 0 0 0 1px rgba(11,70,130,.25); object-fit: cover; user-select: none; -webkit-user-drag: none; }
-.reel-tile.reel-main { width: calc(var(--tile-w) * 1.4); border-radius: 22px; border-width: 4px; }
-@media (max-width: 760px) {
-  .login-hero { min-height: 0; }
-  .reel { position: static; overflow: visible; -webkit-mask-image: none; mask-image: none; }
-  .reel-col { position: static; transform: none; padding: 0; }
-  .reel-above, .reel-below-box { display: none; }
-  .reel-pending .reel-col { visibility: visible; }
-}
-.login-hero .tagline { display: block; background: none; border: 0; border-radius: 0; padding: 0; margin: 0; max-width: 440px; font-family: var(--font); font-size: clamp(30px, 3.6vw, 48px); font-weight: 700; line-height: 1.12; letter-spacing: -.03em; color: #123d59; text-shadow: 0 2px 0 #ffffffa6; }
+.login-hero .hero-heading { font-family: 'Trebuchet MS', var(--font); font-size: clamp(36px,4.2vw,59px); font-weight: 700; letter-spacing: -.055em; line-height: 1.04; color: #123d59; text-shadow: 0 2px 0 #ffffffa6; margin-bottom: 18px; }
+.login-hero .tagline { display: block; background: none; border: 0; border-radius: 0; padding: 0; font-size: 14px; color: #245374; margin-bottom: 12px; max-width: 370px; }
 .login-hero .lede { background: none; padding: 0; font-size: 18px; max-width: 400px; line-height: 1.5; margin-bottom: 24px; text-shadow: 0 1px #ffffff85; }
 .bullets { gap: 9px; }
 .bullets li { display: flex; align-items: center; gap: 12px; border-radius: 13px; width: 100%; max-width: 375px; padding: 10px 13px; background: linear-gradient(#ffffffeb,#eaf8ffd9); font-size: 14px; }
@@ -655,6 +646,10 @@ body { -webkit-text-stroke: 0; letter-spacing: .01em; }
 }
 .fx-off #fx-meadow { transform: none; }
 
+/* Tiny foreground daisies: stems, leaves and petals, rather than flat blocks. */
+.bloom, .bloom.b1, .bloom.b2 { width: 18px; height: 29px; background: linear-gradient(#59923b,#36642d) 8px 10px / 2px 19px no-repeat; }
+.bloom::before { content: ''; position: absolute; left: 5px; top: 3px; width: 7px; height: 7px; border-radius: 50%; background: #f3d76b; box-shadow: 0 -4px 0 0 #fffce5,4px -1px 0 0 #fffce5,3px 4px 0 0 #fffce5,-3px 4px 0 0 #fffce5,-4px -1px 0 0 #fffce5; }
+.bloom::after { content: ''; position: absolute; left: 9px; top: 17px; width: 8px; height: 4px; background: #75a54a; border-radius: 0 100% 0 100%; transform: rotate(-30deg); }
 /* Keep the top of the welcome screen reachable on short laptop windows. */
 @media (min-width: 761px) { .login { align-content: safe center; } }
 
@@ -667,3 +662,36 @@ body { -webkit-text-stroke: 0; letter-spacing: .01em; }
   -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
 }
 #fx-sun { top: -11vmin; left: -11vmin; width: 46vmin; height: 46vmin; }
+
+/* A quiet ornamental pond, embedded in the foreground hill. */
+.pond-koi { animation: koi-glide 9s ease-in-out infinite alternate; }
+.koi-two { animation-duration: 12s; animation-delay: -4s; }
+.koi-three { animation-duration: 10s; animation-delay: -6s; }
+.pond-ripple { opacity: .28; animation: pond-shimmer 6s ease-in-out infinite alternate; }
+@keyframes koi-glide { from { transform: translateX(-9px) rotate(-3deg); } to { transform: translateX(12px) rotate(4deg); } }
+@keyframes pond-shimmer { from { opacity: .12; } to { opacity: .4; } }
+.fx-off .pond-koi, .fx-off .pond-ripple { animation: none; }
+@media (prefers-reduced-motion: reduce) { .pond-koi, .pond-ripple { animation: none; } }
+
+/* Workspace hierarchy and a quieter, consistent desktop. */
+.login-hero .meadow-tagline { font-size: clamp(30px,3.6vw,46px); letter-spacing: -.035em; line-height: 1.16; max-width: 560px; margin: 0 0 22px; }
+.window h1, .org-title h1 { font-family: var(--font); font-weight: 700; font-size: 25px; letter-spacing: -.025em; }
+.org-title { flex-wrap: wrap; }
+.org-head { padding: 18px 20px 0; }
+.pad { padding: 22px; }
+.section-heading { margin-bottom: 17px; }
+.section-heading h2 { font-size: 23px; }
+.focus-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,210px),1fr)); gap: 14px; }
+.focus-card { display: flex; flex-direction: column; gap: 10px; padding: 18px; }
+.focus-card h3 { font-size: 19px; line-height: 1.25; margin: 0; }
+.focus-card p { font-size: 14px; color: var(--ink-soft); }
+.focus-card .btn { margin-top: auto; align-self: flex-start; }
+.eyebrow { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: #366579; }
+.event-card { display: flex; flex-direction: column; gap: 10px; padding: 24px 19px 18px; }
+.event-card h3 { font-size: 22px; line-height: 1.2; margin: 0; }
+.event-date { font-size: 16px; font-weight: 700; color: #255779; }
+.event-cta { margin-top: auto; padding-top: 12px; border-top: 1px solid #aec7a46b; color: #246339; font-weight: 700; }
+.chat-log { padding: 20px; }
+.role { padding: 17px; margin-bottom: 13px; }
+.wave { animation: none; }
+@media(max-width:760px) { .pad { padding: 15px; } .org-head { padding: 15px 14px 0; } .org-title h1 { font-size: 22px; } .login-hero .meadow-tagline { font-size: 33px; } }
