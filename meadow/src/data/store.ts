@@ -3,12 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createSampleState } from "./sample.ts";
-import type { DemoState } from "./types.ts";
+import type { DemoState, Member } from "./types.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_STATE_PATH = path.resolve(__dirname, "../../data/demo-state.json");
 
 const MAX_PROCESSED_IDS = 500;
+const MAX_UPDATES = 200;
 
 export interface StateStore {
   load(): Promise<DemoState>;
@@ -20,6 +21,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function coerceMembers(raw: Record<string, unknown>): DemoState["members"] {
+  const out: DemoState["members"] = {};
+  for (const [id, value] of Object.entries(raw)) {
+    if (!isRecord(value)) continue;
+    const member = value as Partial<Member> & { id?: string };
+    out[id] = {
+      id: typeof member.id === "string" ? member.id : id,
+      name: typeof member.name === "string" ? member.name : id,
+      orgId: typeof member.orgId === "string" ? member.orgId : "",
+      phone: typeof member.phone === "string" ? member.phone : null,
+      spaceId: typeof member.spaceId === "string" ? member.spaceId : null,
+      platformUserId:
+        typeof member.platformUserId === "string" ? member.platformUserId : null,
+      recurringAvailability:
+        typeof member.recurringAvailability === "string"
+          ? member.recurringAvailability
+          : "",
+    };
+  }
+  return out;
+}
+
 function coerceState(raw: unknown): DemoState | null {
   if (!isRecord(raw) || raw.version !== 1) return null;
   if (!isRecord(raw.organizations) || !isRecord(raw.events) || !isRecord(raw.members)) {
@@ -29,17 +52,26 @@ function coerceState(raw: unknown): DemoState | null {
   const processed = Array.isArray(raw.processedMessageIds)
     ? raw.processedMessageIds.filter((id): id is string => typeof id === "string")
     : [];
+  const updates = Array.isArray(raw.updates) ? (raw.updates as DemoState["updates"]) : [];
+  const chatHistories = isRecord(raw.chatHistories)
+    ? (raw.chatHistories as DemoState["chatHistories"])
+    : {};
   return {
     version: 1,
     organizations: raw.organizations as DemoState["organizations"],
     events: raw.events as DemoState["events"],
-    members: raw.members as DemoState["members"],
+    members: coerceMembers(raw.members),
     pendingQuestions: raw.pendingQuestions as DemoState["pendingQuestions"],
+    chatHistories,
+    updateEpoch:
+      typeof raw.updateEpoch === "string" ? raw.updateEpoch : `epoch_${Date.now().toString(36)}`,
+    updateSeq: typeof raw.updateSeq === "number" ? raw.updateSeq : 0,
+    updates: updates.slice(-MAX_UPDATES),
     processedMessageIds: processed.slice(-MAX_PROCESSED_IDS),
   };
 }
 
-/** Local JSON persistence. Swap this class for an HTTP/backend client later. */
+/** Local JSON persistence for bridge-only state (pending questions, update queue, links). */
 export class FileStateStore implements StateStore {
   readonly path: string;
 
@@ -66,6 +98,7 @@ export class FileStateStore implements StateStore {
   async save(state: DemoState): Promise<void> {
     const trimmed: DemoState = {
       ...state,
+      updates: state.updates.slice(-MAX_UPDATES),
       processedMessageIds: state.processedMessageIds.slice(-MAX_PROCESSED_IDS),
     };
     await mkdir(path.dirname(this.path), { recursive: true });

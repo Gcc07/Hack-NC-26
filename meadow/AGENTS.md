@@ -1,18 +1,25 @@
 # meadow — agent instructions
 
-This is a [Spectrum](https://photon.codes/docs/spectrum-ts) app, pinned to `spectrum-ts@^12.10.1`. The entry point is `src/index.ts`, which configures the imessage provider(s) and runs the echo loop.
+This is a [Spectrum](https://photon.codes/docs/spectrum-ts) app, pinned to `spectrum-ts@^12.10.1`. The entry point is `src/index.ts`: Spectrum iMessage loop + HTTP bridge for the browser.
 
 ## Working in this project
 
-- Run the app with `npm run start`.
-- Add providers by importing them in `src/index.ts` and listing them in the `Spectrum({ providers: [...] })` config.
-- Outgoing message content uses the builders documented in the skill (text, attachment, voice, contact, richlink, poll, group, custom).
+- Run Flask (`python app.py`) and the bridge (`cd meadow && npm run start`).
+- Local tests (no texts): `npm run check`.
+- Dewey SMS: keywords → Gemini NLU (`/api/ai/sms-intent`) → freeform chat (`/api/ai/chat`); copy via `/api/ai/sms-copy`.
+- Structured demos still work: `REMINDER`, `TIME`, `FOOD`. Frontend hits the bridge (`/reminders`, `/surveys`, …).
+- Persist bridge-only state in `data/` (gitignored). Sync plans / time / food into Flask when `BACKEND_URL` is set.
+- Gemini key: repo-root `GEMINI_API_KEY` only. Never put keys in frontend code.
 
 ## Environment
 
-This project reads secrets from `.env` (gitignored). **Do not read, write, or echo `.env`** — it contains credentials.
+Reads `meadow/.env` (gitignored). **Do not read, write, or echo `.env`.**
 
-If startup fails with an authentication error, tell the user to verify their `PROJECT_ID` / `PROJECT_SECRET` at the [Photon dashboard](https://app.photon.codes).
+- Photon: `PROJECT_ID`, `PROJECT_SECRET`
+- Flask: `BACKEND_URL` (e.g. `http://127.0.0.1:5000`)
+- Bridge: `BRIDGE_PORT` (default `5055`), `BRIDGE_MODE`=`dry`|`live`
+
+If Spectrum auth fails, verify credentials at the [Photon dashboard](https://app.photon.codes).
 
 ## Spectrum SDK reference
 

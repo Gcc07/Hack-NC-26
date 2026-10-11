@@ -509,6 +509,16 @@
     let orgId;
     const ids = {};
     M.store.update((s) => {
+      // Keep iMessage bridge fields across demo reload (same fixed event/member ids).
+      const keepEv = s.events.evt_sample_meeting;
+      const keptBridge = keepEv ? {
+        plans: keepEv.plans || {},
+        imessage: keepEv.imessage || {},
+        meetingTimeVotes: keepEv.meetingTimeVotes || {},
+        foodFeedback: keepEv.foodFeedback || {},
+      } : null;
+      const keptGuest = s.guestbook.filter((g) => g.eventId === 'evt_sample_meeting');
+
       // remove an older demo, if any
       Object.values(s.users).filter((u) => u.demo).forEach((u) => delete s.users[u.id]);
       Object.values(s.orgs).filter((o) => o.demo).forEach((o) => {
@@ -541,17 +551,19 @@
           }
           if ((wd === 6 || wd === 0) && rnd() < 0.2) busy.push([new Date(day0).setHours(12, 0, 0, 0), new Date(day0).setHours(16, 0, 0, 0)]);
         }
-        const id = M.uid('u');
+        // Stable ids so iMessage (meadow) can write plans onto the same Flask rows the org UI reads.
+        const id = p.name === 'Alex Kim' ? 'mem_alex' : M.uid('u');
         ids[p.name] = id;
         s.users[id] = {
           id, name: p.name, email: p.name.split(' ')[0].toLowerCase() + '@demo.meadow', createdAt: now, demo: true,
           busy: M.mergeIntervals(busy), statusBusy: [], calendar: { source: 'demo', name: 'Demo class schedule', importedAt: now, count: busy.length },
           bridgeOptIn: {}, presence: p.presence === 'away' ? 'away' : 'online', demoPresence: p.presence, away: p.away, lastSeen: 0,
+          phone: '', imessageOptIn: p.name === 'Alex Kim', imessageError: '',
         };
       });
 
       const org = {
-        id: M.uid('o'), name: 'Sunrise Service Society', emoji: '🌅', inviteCode: 'SUNRISE', createdAt: now, demo: true,
+        id: 'org_demo', name: 'Sunrise Service Society', emoji: '🌅', inviteCode: 'SUNRISE', createdAt: now, demo: true,
         members: {}, bridge: { type: 'none', botId: '' }, handoff: null,
       };
       cast.forEach((p, i) => (org.members[ids[p.name]] = { role: p.role, joinedAt: now - (30 - i) * DAY }));
@@ -560,9 +572,10 @@
 
       const mkEvent = (title, type, loc, start, end, roles, extra) => {
         const ev = {
-          id: M.uid('e'), orgId, title, type, location: loc, description: '', start, end, status: 'pending', createdBy: ids['Jordan Reyes'],
+          id: (extra && extra.id) || M.uid('e'), orgId, title, type, location: loc, description: '', start, end, status: 'pending', createdBy: ids['Jordan Reyes'],
           createdAt: now - 3 * DAY, checkinCode: 'MDW-' + Math.floor(1000 + Math.random() * 9000), attendance: [],
           roles: roles.map((r) => ({ id: M.uid('r'), name: r[0], required: r[1], headcount: r[2], offsetMin: r[3], durationMin: r[4], anchor: r[5] || 'start', claims: (r[6] || []).map((n) => ids[n]) })),
+          plans: {}, imessage: {}, meetingTimeVotes: {}, foodFeedback: {},
           ...extra,
         };
         M.recomputeStatus(ev);
@@ -587,7 +600,12 @@
         ['Cleanup', true, 2, 0, 30, 'end', ['Theo Martin']],
       ], {description: 'Demo scenario: a free clothing and dorm-item swap with a mending station. Everyone is welcome; bringing an item is optional. Help neighbors reuse what they have and learn a repair skill. The venue and supplies still need organizer confirmation; staffing complete does not mean all logistics are ready.'});
       const tue = nextDow(2, 18, 30);
-      const meeting = mkEvent('Weekly General Meeting', 'Meeting', 'Hall 204', tue, tue + HOUR, []);
+      // Fixed id matches meadow SAMPLE.eventId — SMS RSVPs land on event.plans[mem_alex].
+      const meeting = mkEvent('Weekly General Meeting', 'Meeting', 'Hall 204', tue, tue + HOUR, [], {
+        id: 'evt_sample_meeting',
+        ...(keptBridge || {}),
+      });
+      if (keptGuest.length) s.guestbook.push(...keptGuest);
       const past = new Date(M.addDays(today0, -6)).setHours(18, 0, 0, 0);
       const social = mkEvent('Welcome Social', 'Social', 'Quad lawn', past, past + 2 * HOUR, [
         ['Setup', true, 2, -45, 45, 'start', ['Jordan Reyes', 'Theo Martin']],

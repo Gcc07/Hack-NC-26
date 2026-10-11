@@ -1,6 +1,7 @@
 import { SAMPLE } from "../data/sample.ts";
 import type { MeadowRepository } from "../data/repository.ts";
 import type { Member, PendingQuestion } from "../data/types.ts";
+import type { Dewey } from "./dewey.ts";
 import {
   isFoodDemoCommand,
   isReminderCommand,
@@ -18,28 +19,27 @@ export interface InboundContext {
 }
 
 export interface HandlerResult {
-  /** Replies to send back (empty if silent skip, e.g. duplicate). */
   replies: string[];
-  /** True only when a durable write succeeded. */
   saved: boolean;
   duplicate?: boolean;
+  chat?: boolean;
 }
 
 const TIME_OPTIONS = ["6:30", "8:30"] as const;
-const RSVP_PROMPT =
-  "🌊 Demo Org reminder: our Sample Meeting is tomorrow at 6:30 PM. Reply YES or I can't make it.";
-const TIME_PROMPT =
-  "Quick scheduling check for Sample Meeting — which time works better: 6:30 or 8:30?";
-const FOOD_PROMPT =
-  "Food feedback for Sample Meeting: how was the food (or what should we order next time)?";
+const FALLBACK_RSVP =
+  "🌊 Sunrise reminder: Weekly General Meeting is tomorrow at 6:30 PM. Reply YES, I can't make it, or say if you're running late.";
+const FALLBACK_TIME =
+  "Which time works better for Weekly General Meeting — 6:30 or 8:30?";
+const FALLBACK_FOOD =
+  "Food check for Weekly General Meeting: how was it, or what should we order next time?";
 
 /**
- * Photon-free message processing. All I/O goes through MeadowRepository so
- * the file store can be swapped for the real backend later.
+ * Structured keywords first → Gemini NLU for messy replies → Dewey chat.
  */
 export async function handleInbound(
   repo: MeadowRepository,
-  ctx: InboundContext
+  ctx: InboundContext,
+  dewey?: Dewey
 ): Promise<HandlerResult> {
   if (await repo.hasProcessedMessage(ctx.messageId)) {
     return { replies: [], saved: false, duplicate: true };
@@ -50,7 +50,7 @@ export async function handleInbound(
     const mark = await repo.markProcessed(ctx.messageId);
     return {
       replies: [
-        "I don't recognize this chat yet. For the demo, only one sample member can be linked — reset data/demo-state.json if you need a fresh link.",
+        "I don't recognize this chat yet. Opt in under Me → iMessage in the app, or text after a reminder.",
       ],
       saved: mark.ok,
     };
@@ -61,49 +61,117 @@ export async function handleInbound(
   const state = await repo.load();
   const pending = repo.pendingForMember(state, member.id);
   const prefix = newlyLinked
-    ? `Linked this chat to ${member.name} (${SAMPLE.memberId}). `
+    ? `Linked this chat to ${member.name}. `
     : "";
+  const orgName =
+    state.organizations[member.orgId]?.name ?? "your org";
+  const event =
+    state.events[pending[0]?.eventId ?? SAMPLE.eventId] ??
+    state.events[SAMPLE.eventId] ??
+    null;
 
   if (isReminderCommand(text)) {
-    return startQuestion(repo, ctx, member, "rsvp", RSVP_PROMPT, prefix);
+    const prompt = dewey
+      ? await dewey.composePrompt({
+          kind: "reminder",
+          title: event?.title ?? "Sample Meeting",
+          org: orgName,
+          when: event?.scheduledLabel || "soon",
+          fallback: FALLBACK_RSVP,
+        })
+      : FALLBACK_RSVP;
+    return startQuestion(repo, ctx, member, "rsvp", prompt, prefix);
   }
   if (isTimeDemoCommand(text)) {
-    return startQuestion(repo, ctx, member, "meeting_time", TIME_PROMPT, prefix, [
+    const prompt = dewey
+      ? await dewey.composePrompt({
+          kind: "meeting_time",
+          title: event?.title ?? "Sample Meeting",
+          org: orgName,
+          options: [...TIME_OPTIONS],
+          fallback: FALLBACK_TIME,
+        })
+      : FALLBACK_TIME;
+    return startQuestion(repo, ctx, member, "meeting_time", prompt, prefix, [
       ...TIME_OPTIONS,
     ]);
   }
   if (isFoodDemoCommand(text)) {
-    return startQuestion(repo, ctx, member, "food_feedback", FOOD_PROMPT, prefix);
+    const prompt = dewey
+      ? await dewey.composePrompt({
+          kind: "food_feedback",
+          title: event?.title ?? "Sample Meeting",
+          org: orgName,
+          fallback: FALLBACK_FOOD,
+        })
+      : FALLBACK_FOOD;
+    return startQuestion(repo, ctx, member, "food_feedback", prompt, prefix);
   }
 
-  const answer = await tryAnswerPending(repo, member, pending, text);
-  if (answer) {
-    const mark = await repo.markProcessed(ctx.messageId);
-    if (!mark.ok) {
-      return {
-        replies: [
-          `${prefix}I understood your reply, but could not save it (${mark.error}). Please try again.`,
-        ],
-        saved: false,
-      };
+  // Keyword answer for open questions
+  const keyword = await tryAnswerPending(repo, member, pending, text, dewey);
+  if (keyword) {
+    return finish(repo, ctx, prefix, keyword);
+  }
+
+  // Gemini NLU when keywords miss but something is pending (or soft RSVP in free text)
+  if (dewey && (pending.length > 0 || text.length > 0)) {
+    const intent = await dewey.interpret(ctx.text.trim(), pending);
+    if (intent && intent.confidence >= 0.55) {
+      const fromAi = await applyIntent(repo, member, pending, intent, dewey);
+      if (fromAi) {
+        return finish(repo, ctx, prefix, fromAi);
+      }
     }
-    return {
-      replies: answer.replies.map((r, i) => (i === 0 ? prefix + r : r)),
-      saved: answer.saved,
-    };
+  }
+
+  // Freeform Dewey chat
+  if (dewey) {
+    try {
+      const chat = await dewey.chat({
+        member,
+        orgName,
+        pending,
+        eventTitle: event?.title ?? "Sample Meeting",
+        userText: ctx.text.trim(),
+      });
+      const mark = await repo.markProcessed(ctx.messageId);
+      return {
+        replies: [prefix + chat.text],
+        saved: chat.saved && mark.ok,
+        chat: true,
+      };
+    } catch (error) {
+      console.error("[meadow] chat path failed", error);
+    }
   }
 
   const mark = await repo.markProcessed(ctx.messageId);
   const help =
     pending.length > 0
-      ? `I have a pending question (${pending.map((p) => p.kind).join(", ")}). ` +
-        describePending(pending) +
-        " Or send REMINDER, TIME, or FOOD to start a demo prompt."
-      : "Send REMINDER for the RSVP demo, TIME for the 6:30/8:30 question, or FOOD for food feedback.";
+      ? `Open question: ${describePending(pending)}. Or just chat once Gemini is on.`
+      : "Send REMINDER, TIME, or FOOD — or chat if Gemini is enabled.";
+  return { replies: [prefix + help], saved: mark.ok };
+}
 
+async function finish(
+  repo: MeadowRepository,
+  ctx: InboundContext,
+  prefix: string,
+  answer: { replies: string[]; saved: boolean }
+): Promise<HandlerResult> {
+  const mark = await repo.markProcessed(ctx.messageId);
+  if (!mark.ok) {
+    return {
+      replies: [
+        `${prefix}I understood your reply, but could not save it (${mark.error}). Please try again.`,
+      ],
+      saved: false,
+    };
+  }
   return {
-    replies: [prefix + help],
-    saved: mark.ok,
+    replies: answer.replies.map((r, i) => (i === 0 ? prefix + r : r)),
+    saved: answer.saved,
   };
 }
 
@@ -120,7 +188,6 @@ async function startQuestion(
   if (!event) {
     return { replies: ["Sample event is missing from local state."], saved: false };
   }
-
   const created = await repo.createPendingQuestion({
     kind,
     orgId: event.orgId,
@@ -132,53 +199,38 @@ async function startQuestion(
   if (!created.ok || !created.question) {
     return {
       replies: [
-        `${prefix}Could not save the pending question${created.ok ? "" : ` (${created.error})`}. Not claiming it was queued.`,
+        `${prefix}Could not queue the question${created.ok ? "" : ` (${created.error})`}.`,
       ],
       saved: false,
     };
   }
-
   const mark = await repo.markProcessed(ctx.messageId);
-  if (!mark.ok) {
-    return {
-      replies: [
-        `${prefix}Queued the question locally, but failed to record message dedupe (${mark.error}). Prompt: ${prompt}`,
-      ],
-      saved: true,
-    };
-  }
-
-  return { replies: [prefix + prompt], saved: true };
+  return { replies: [prefix + prompt], saved: mark.ok };
 }
 
 async function tryAnswerPending(
   repo: MeadowRepository,
   member: Member,
   pending: PendingQuestion[],
-  text: string
+  text: string,
+  dewey?: Dewey
 ): Promise<{ replies: string[]; saved: boolean } | null> {
   if (pending.length === 0) return null;
 
   const rsvpIntent = parseRsvpIntent(text);
-  const timePending = pending.filter((p) => p.kind === "meeting_time");
   const rsvpPending = pending.filter((p) => p.kind === "rsvp");
+  const timePending = pending.filter((p) => p.kind === "meeting_time");
   const foodPending = pending.filter((p) => p.kind === "food_feedback");
 
-  // Prefer matching by reply shape so multiple pending questions can coexist.
-  if (rsvpIntent && rsvpPending.length === 1 && timePending.length === 0) {
-    return answerRsvp(repo, member, rsvpPending[0]!, rsvpIntent);
-  }
-  if (rsvpIntent && rsvpPending.length === 1 && timePending.length > 0) {
-    // "yes"/"no" could be RSVP; times are numeric — still prefer RSVP for yes/no.
-    return answerRsvp(repo, member, rsvpPending[0]!, rsvpIntent);
-  }
-  if (rsvpIntent && rsvpPending.length > 1) {
-    return {
-      replies: [
-        "You have more than one open RSVP. Reply with the event name, or send REMINDER again to reset the sample RSVP.",
-      ],
-      saved: false,
-    };
+  if (rsvpIntent && rsvpPending.length === 1) {
+    return answerRsvp(
+      repo,
+      member,
+      rsvpPending[0]!,
+      rsvpIntent === "accept" ? "going" : "cant",
+      null,
+      dewey
+    );
   }
 
   if (timePending.length > 0) {
@@ -188,38 +240,25 @@ async function tryAnswerPending(
     if (choice === "ambiguous") {
       return {
         replies: [
-          `That could mean more than one time. Please reply with exactly one of: ${options.join(" or ")}.`,
+          `That could mean more than one time. Reply with exactly one of: ${options.join(" or ")}.`,
         ],
         saved: false,
       };
     }
-    if (choice) {
-      if (timePending.length > 1) {
-        return {
-          replies: [
-            "You have more than one open time question. Send TIME to reset the sample meeting-time question, then answer 6:30 or 8:30.",
-          ],
-          saved: false,
-        };
-      }
-      return answerTime(repo, member, question, choice);
+    if (choice && timePending.length === 1) {
+      return answerTime(repo, member, question, choice, dewey);
     }
   }
 
   if (foodPending.length === 1 && text.length > 0 && !rsvpIntent) {
-    // Any non-empty non-RSVP text answers the open food question.
-    // If RSVP is also pending and they said yes/no, we already handled above.
-    const alsoRsvp = rsvpPending.length > 0;
     const timeHit =
       timePending.length > 0
         ? parseMeetingTimeChoice(text, [...TIME_OPTIONS])
         : null;
-    if (alsoRsvp || timeHit) {
+    if (rsvpPending.length > 0 || timeHit) {
       return {
         replies: [
-          "I'm not sure which question you're answering. " +
-            describePending(pending) +
-            " Reply YES / I can't make it for RSVP, 6:30 or 8:30 for time, or a food note for feedback.",
+          "Not sure which question that answers. " + describePending(pending),
         ],
         saved: false,
       };
@@ -227,35 +266,73 @@ async function tryAnswerPending(
     return answerFood(repo, member, foodPending[0]!, text);
   }
 
-  if (pending.length > 1) {
+  // Leave mismatches for Gemini NLU / chat instead of hard-blocking.
+  return null;
+}
+
+async function applyIntent(
+  repo: MeadowRepository,
+  member: Member,
+  pending: PendingQuestion[],
+  intent: {
+    intent: string;
+    choice: string | null;
+    minutes: number | null;
+    food: string | null;
+    clarify: string | null;
+    confidence: number;
+  },
+  dewey?: Dewey
+): Promise<{ replies: string[]; saved: boolean } | null> {
+  const rsvpQ = pending.find((p) => p.kind === "rsvp");
+  const timeQ = pending.find((p) => p.kind === "meeting_time");
+  const foodQ = pending.find((p) => p.kind === "food_feedback");
+
+  if (intent.intent === "clarify") {
     return {
       replies: [
-        "I'm not sure which question you're answering. " + describePending(pending),
+        intent.clarify?.trim() ||
+          "Quick check — are you answering the RSVP, the time options, or food feedback?",
       ],
       saved: false,
     };
   }
 
-  // Single pending question but reply didn't match expected shape.
-  const only = pending[0]!;
-  if (only.kind === "rsvp") {
-    return {
-      replies: ["Please reply YES or I can't make it for the Sample Meeting RSVP."],
-      saved: false,
-    };
+  if (
+    (intent.intent === "rsvp_accept" ||
+      intent.intent === "rsvp_decline" ||
+      intent.intent === "rsvp_late") &&
+    rsvpQ
+  ) {
+    const status =
+      intent.intent === "rsvp_accept"
+        ? "going"
+        : intent.intent === "rsvp_late"
+          ? "late"
+          : "cant";
+    return answerRsvp(
+      repo,
+      member,
+      rsvpQ,
+      status,
+      intent.minutes,
+      dewey
+    );
   }
-  if (only.kind === "meeting_time") {
-    const options = only.options?.length ? only.options : [...TIME_OPTIONS];
-    return {
-      replies: [`Please reply with one of: ${options.join(" or ")}.`],
-      saved: false,
-    };
+
+  if (intent.intent === "pick_time" && timeQ && intent.choice) {
+    const options = timeQ.options?.length ? timeQ.options : [...TIME_OPTIONS];
+    const choice =
+      parseMeetingTimeChoice(normalizeText(intent.choice), options) ||
+      intent.choice;
+    if (choice && choice !== "ambiguous") {
+      return answerTime(repo, member, timeQ, choice, dewey);
+    }
   }
-  if (only.kind === "food_feedback") {
-    return {
-      replies: ["Send a short note about the food (anything is fine)."],
-      saved: false,
-    };
+
+  if (intent.intent === "food_answer" && foodQ) {
+    const food = (intent.food || "").trim();
+    if (food) return answerFood(repo, member, foodQ, food);
   }
 
   return null;
@@ -264,12 +341,12 @@ async function tryAnswerPending(
 function describePending(pending: PendingQuestion[]): string {
   return pending
     .map((p) => {
-      if (p.kind === "rsvp") return "RSVP → YES or I can't make it";
+      if (p.kind === "rsvp") return "RSVP → YES / can't / running late";
       if (p.kind === "meeting_time") {
         const opts = p.options?.length ? p.options : [...TIME_OPTIONS];
-        return `meeting time → ${opts.join(" or ")}`;
+        return `time → ${opts.join(" or ")}`;
       }
-      return "food feedback → a short note";
+      return "food → a short note";
     })
     .join("; ");
 }
@@ -278,19 +355,21 @@ async function answerRsvp(
   repo: MeadowRepository,
   member: Member,
   question: PendingQuestion,
-  intent: "accept" | "decline"
+  status: "going" | "late" | "cant",
+  minutes: number | null,
+  dewey?: Dewey
 ): Promise<{ replies: string[]; saved: boolean }> {
-  const status = intent === "accept" ? "accepted" : "declined";
-  const saved = await repo.saveRsvp(
+  const saved = await repo.savePlan(
     question.eventId,
     member.id,
     status,
+    minutes,
     question.id
   );
   if (!saved.ok) {
     return {
       replies: [
-        `I couldn't save your RSVP (${saved.error}). You're not marked ${status} yet.`,
+        `Couldn't save that RSVP (${saved.error}). You're not marked yet.`,
       ],
       saved: false,
     };
@@ -298,41 +377,53 @@ async function answerRsvp(
 
   const event = saved.state.events[question.eventId];
   const availability = saved.state.members[member.id]?.recurringAvailability;
+  const title = event?.title ?? "the event";
 
-  if (intent === "decline") {
+  if (status === "cant") {
     return {
       replies: [
-        `Got it — you're marked as unable to attend ${event?.title ?? "the event"} only. ` +
-          `Your recurring availability (${availability}) is unchanged, and the meeting was not rescheduled.`,
+        `Got it — can't make ${title} only. Recurring availability (${availability || "unchanged"}) and the schedule stay put.`,
       ],
       saved: true,
     };
   }
 
-  // After accept, queue the meeting-time question for the demo chain.
+  if (status === "late") {
+    const lateBit = minutes ? ` (~${minutes} min)` : "";
+    return {
+      replies: [`Noted — you're coming to ${title} but running late${lateBit}.`],
+      saved: true,
+    };
+  }
+
+  const timePrompt = dewey
+    ? await dewey.composePrompt({
+        kind: "meeting_time",
+        title,
+        org: question.orgId,
+        options: [...TIME_OPTIONS],
+        fallback: FALLBACK_TIME,
+      })
+    : FALLBACK_TIME;
+
   const timeQ = await repo.createPendingQuestion({
     kind: "meeting_time",
     orgId: question.orgId,
     eventId: question.eventId,
     memberId: member.id,
-    prompt: TIME_PROMPT,
+    prompt: timePrompt,
     options: [...TIME_OPTIONS],
   });
   if (!timeQ.ok) {
     return {
       replies: [
-        `You're marked as attending ${event?.title ?? "the event"}! ` +
-          `(Could not queue the follow-up time question: ${timeQ.error}.)`,
+        `You're in for ${title}! (Couldn't queue the time follow-up: ${timeQ.error}.)`,
       ],
       saved: true,
     };
   }
-
   return {
-    replies: [
-      `You're marked as attending ${event?.title ?? "the event"}!`,
-      TIME_PROMPT,
-    ],
+    replies: [`You're in for ${title}!`, timePrompt],
     saved: true,
   };
 }
@@ -341,7 +432,8 @@ async function answerTime(
   repo: MeadowRepository,
   member: Member,
   question: PendingQuestion,
-  choice: string
+  choice: string,
+  dewey?: Dewey
 ): Promise<{ replies: string[]; saved: boolean }> {
   const saved = await repo.saveMeetingTimeVote(
     question.eventId,
@@ -352,30 +444,38 @@ async function answerTime(
   if (!saved.ok) {
     return {
       replies: [
-        `I couldn't save your time preference (${saved.error}). Nothing was recorded yet.`,
+        `Couldn't save your time preference (${saved.error}). Nothing recorded yet.`,
       ],
       saved: false,
     };
   }
+
+  const foodPrompt = dewey
+    ? await dewey.composePrompt({
+        kind: "food_feedback",
+        title: "Sample Meeting",
+        org: question.orgId,
+        fallback: FALLBACK_FOOD,
+      })
+    : FALLBACK_FOOD;
 
   const foodQ = await repo.createPendingQuestion({
     kind: "food_feedback",
     orgId: question.orgId,
     eventId: question.eventId,
     memberId: member.id,
-    prompt: FOOD_PROMPT,
+    prompt: foodPrompt,
   });
   if (!foodQ.ok) {
     return {
       replies: [
-        `Saved your preference for ${choice}. (Could not queue food feedback: ${foodQ.error}.)`,
+        `Saved — you prefer ${choice}. (Couldn't queue food feedback: ${foodQ.error}.)`,
       ],
       saved: true,
     };
   }
-
   return {
-    replies: [`Saved — you prefer ${choice} for Sample Meeting.`, FOOD_PROMPT],
+    replies: [`Saved — ${choice} works for you.`, foodPrompt],
     saved: true,
   };
 }
@@ -395,15 +495,14 @@ async function answerFood(
   if (!saved.ok) {
     return {
       replies: [
-        `I couldn't save your food feedback (${saved.error}). Nothing was recorded yet.`,
+        `Couldn't save food feedback (${saved.error}). Nothing recorded yet.`,
       ],
       saved: false,
     };
   }
-
   return {
     replies: [
-      `Thanks — saved your food feedback for Sample Meeting under ${member.name} / ${question.orgId} / ${question.eventId}.`,
+      `Thanks — saved your food note for ${question.eventId} under ${member.name}.`,
     ],
     saved: true,
   };

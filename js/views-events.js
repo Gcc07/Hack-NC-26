@@ -42,11 +42,18 @@
   function eventCard(ev, state, me) {
     const prog = M.eventProgress(ev);
     const mine = ev.roles.filter((r) => r.claims.includes(me.id));
+    const plans = Object.values(ev.plans || {});
+    const planHint = plans.length
+      ? plans.filter((p) => p.status === 'going').length + ' in · '
+        + plans.filter((p) => p.status === 'late').length + ' late · '
+        + plans.filter((p) => p.status === 'cant').length + " can't"
+      : null;
     return h('a', { class: 'event-card status-' + ev.status, href: '#/o/' + ev.orgId + '/events/' + ev.id },
       h('div', { class: 'row between' }, h('span', { class: 'pill' }, ev.type), statusPill(ev)),
       h('h3', null, ev.title),
       h('div', { class: 'event-date icon-label' }, M.icon('calendar'), M.fmt.range(ev.start, ev.end)),
       ev.location ? h('div', { class: 'hint' }, '📍 ' + ev.location) : null,
+      planHint ? h('div', { class: 'chip free' }, '📱 ' + planHint) : null,
       prog.need
         ? M.gardenProgress(prog)
         : h('small', null, 'No required roles'),
@@ -126,6 +133,42 @@
         : cancelled ? null : h('div', { class: 'row' }, codeIn, h('button', { class: 'btn', disabled: !within, onClick: () => M.safe(() => { M.act.checkIn(ev.id, me.id, codeIn.value); M.toast('Checked in!'); }) }, 'Check in')),
       !checked && !within && !cancelled ? h('p', { class: 'hint' }, 'Check-in opens 30 minutes before the event starts.') : null);
 
+    // iMessage / SMS replies (plans, time votes, food) — written by meadow → Flask
+    const plans = ev.plans || {};
+    const votes = ev.meetingTimeVotes || {};
+    const food = ev.foodFeedback || {};
+    const planLabel = (p) =>
+      p.status === 'going' ? '✅ Going'
+        : p.status === 'late' ? `🕒 Late${p.minutes ? ` (~${p.minutes} min)` : ''}`
+          : p.status === 'cant' ? "⚠️ Can't make it" : p.status;
+    const planRows = Object.keys(plans).map((uid) => {
+      const u = state.users[uid];
+      return h('li', null,
+        h('span', { class: 'chip person' }, u && M.avatar(u, 18), u ? M.firstName(u.name) : uid),
+        ' ', planLabel(plans[uid]));
+    });
+    const voteRows = Object.keys(votes).map((uid) => {
+      const u = state.users[uid];
+      return h('li', null,
+        h('span', { class: 'chip person' }, u && M.avatar(u, 18), u ? M.firstName(u.name) : uid),
+        ' prefers ', h('strong', null, String(votes[uid].choice)));
+    });
+    const foodRows = Object.keys(food).map((uid) => {
+      const u = state.users[uid];
+      return h('li', null,
+        h('span', { class: 'chip person' }, u && M.avatar(u, 18), u ? M.firstName(u.name) : uid),
+        ': ', h('q', null, String(food[uid].answer || '')));
+    });
+    const hasBridge = planRows.length || voteRows.length || foodRows.length;
+    const bridge = h('section', { class: 'card' },
+      h('h2', { class: 'icon-label' }, M.icon('chat'), 'iMessage replies'),
+      hasBridge
+        ? h('div', null,
+            planRows.length ? h('div', null, h('h3', null, 'RSVP'), h('ul', { class: 'guestbook' }, planRows)) : null,
+            voteRows.length ? h('div', null, h('h3', null, 'Preferred time'), h('ul', { class: 'guestbook' }, voteRows)) : null,
+            foodRows.length ? h('div', null, h('h3', null, 'Food feedback'), h('ul', { class: 'guestbook' }, foodRows)) : null)
+        : h('p', { class: 'hint' }, 'When members reply to Dewey by text, RSVPs and votes show up here.'));
+
     // guestbook
     const notes = state.guestbook.filter((g) => g.eventId === ev.id).sort((a, b) => a.ts - b.ts);
     const gbIn = h('input', { placeholder: 'Leave a short note for the next team…', maxlength: 300, 'data-keep': 'gb-' + ev.id, 'aria-label': 'Guestbook note' });
@@ -149,6 +192,7 @@
           h('button', { class: 'btn small', onClick: () => M.download(ev.title.replace(/\W+/g, '-') + '.ics', eventIcs(ev), 'text/calendar') }, M.icon('calendar', 19), 'Add to my calendar'),
           officer && !cancelled && prog.open ? h('button', { class: 'btn small', onClick: () => { M.ui.channel = 'event:' + ev.id; M.act.postMessage('event:' + ev.id, me.id, '@dewey nudge'); M.toast('Dewey is drafting nudges in the event chat'); } }, M.icon('drop', 19), 'Draft nudges with Dewey') : null,
           officer && !cancelled ? h('button', { class: 'btn small danger', onClick: () => M.confirm('Cancel this event for everyone?', () => M.safe(() => M.act.cancelEvent(ev.id, me.id))) }, 'Cancel event') : null)),
+      bridge,
       h('section', { class: 'card' }, h('h2', { class: 'icon-label' }, M.icon('people'), 'Roles'),
         ev.roles.length ? ev.roles.map(roleRow) : h('p', { class: 'hint' }, 'This event has no roles — just show up!')),
       checkin, guest,
