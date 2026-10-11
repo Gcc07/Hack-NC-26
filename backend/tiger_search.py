@@ -1,10 +1,10 @@
-"""Org-scoped, cited memory retrieval; embedding work is explicitly opt-in."""
+"""Org-scoped, cited memory retrieval; Gemini embedding work is explicitly opt-in."""
 import json
-import math
 import os
 import re
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+
+from .gemini import EMBEDDING_MODEL, embed, enabled as gemini_enabled
 
 
 def _values(value):
@@ -12,27 +12,43 @@ def _values(value):
 
 
 def memory_documents(state):
-    orgs = {o['id'] for o in _values(state.get('orgs', {}))}
-    events = {e['id']: e for e in _values(state.get('events', {})) if e.get('orgId') in orgs}
+    org_rows = [org for org in _values(state.get('orgs', {})) if isinstance(org, dict) and org.get('id')]
+    orgs = {org['id']: org for org in org_rows}
+    events = {event['id']: event for event in _values(state.get('events', {}))
+              if isinstance(event, dict) and event.get('id') and event.get('orgId') in orgs}
     docs = []
-    def add(key, org, event, source, title, text):
+    def add(key, org, event, source, title, text, page=None):
         if org not in orgs or not isinstance(text, str) or not text.strip():
             return
+        if event:
+            suffix = '/events/' + quote(event, safe='')
+        elif page:
+            suffix = '/' + page
+        else:
+            suffix = '/chat'
         docs.append(dict(id=key, org_id=org, event_id=event, source=source,
                          title=title, body=text.strip(),
-                         url='#/o/' + quote(org, safe='') + ('/events/' + quote(event, safe='') if event else '/chat')))
+                         url='#/o/' + quote(org, safe='') + suffix))
     for event in events.values():
-        add('event:' + event['id'], event['orgId'], event['id'], 'event', event['title'],
+        add('event:' + event['id'], event['orgId'], event['id'], 'event', event.get('title') or 'Event',
             event.get('description', ''))
+    for org in orgs.values():
+        handoff = org.get('handoff') if isinstance(org.get('handoff'), dict) else {}
+        add('handoff:' + org['id'], org['id'], None, 'handoff',
+            (org.get('name') or 'Organization') + ' — officer handoff', handoff.get('text', ''), 'board')
     for note in _values(state.get('guestbook', [])):
+        if not isinstance(note, dict) or not note.get('id'):
+            continue
         event = events.get(note.get('eventId'))
         if event:
             add('guestbook:' + note['id'], event['orgId'], event['id'], 'guestbook',
-                event['title'] + ' — guestbook', note.get('text', ''))
+                (event.get('title') or 'Event') + ' — guestbook', note.get('text', ''))
     for message in _values(state.get('messages', [])):
+        if not isinstance(message, dict) or not message.get('id'):
+            continue
         text = message.get('text', '')
         payload = message.get('payload') or {}
-        if message.get('source') != 'assistant' or not (payload.get('type') == 'summary' or text.startswith('**Summary**')):
+        if message.get('source') != 'assistant' or not (payload.get('type') == 'summary' or (isinstance(text, str) and text.startswith('**Summary**'))):
             continue
         kind, _, target = message.get('channel', '').partition(':')
         event = events.get(target) if kind == 'event' else None
@@ -40,7 +56,7 @@ def memory_documents(state):
         if kind == 'event' and not event:
             continue
         add('summary:' + message['id'], org, event['id'] if event else None,
-            'summary', (event['title'] if event else 'Organization chat') + ' — summary', text)
+            'summary', ((event.get('title') if event else None) or 'Organization chat') + ' — summary', text)
     return docs
 
 
@@ -86,42 +102,31 @@ def sync_memory_documents(conn, state):
 
 
 def _embedding_config():
-    url, model = os.getenv('MEADOW_EMBEDDING_URL', ''), os.getenv('MEADOW_EMBEDDING_MODEL', '')
-    return (url, model) if url and model else None
+    return (EMBEDDING_MODEL,) if gemini_enabled() else None
 
 
-def _embed(text, config):
-    url, model = config
-    headers = {'Content-Type': 'application/json'}
-    key = os.getenv('MEADOW_EMBEDDING_API_KEY')
-    if key:
-        headers['Authorization'] = 'Bearer ' + key
-    request = Request(url, data=json.dumps({'model': model, 'input': text}).encode(), headers=headers)
-    with urlopen(request, timeout=10) as response:
-        vector = json.load(response)['data'][0]['embedding']
-    if not isinstance(vector, list) or not vector or any(type(v) not in (int, float) or not math.isfinite(v) for v in vector) or not any(vector):
-        raise ValueError('Embedding provider returned an invalid vector.')
-    return json.dumps(vector)
+def _embed(text, task='RETRIEVAL_DOCUMENT'):
+    return json.dumps(embed(text, task))
 
 
 def reindex_embeddings(repo, limit=100):
     config = _embedding_config()
     if not config or not hasattr(repo, 'connection'):
-        raise ValueError('Configure Tiger storage, MEADOW_EMBEDDING_URL and MEADOW_EMBEDDING_MODEL first.')
+        raise ValueError('Configure Tiger storage and GEMINI_API_KEY first.')
     with repo.connection() as conn:
         if not _has_vector(conn):
             raise ValueError('Enable the PostgreSQL vector extension and restart the app first.')
-        docs = conn.execute('SELECT id,title,body,org_id FROM meadow_memory WHERE embedding_model IS DISTINCT FROM %s ORDER BY id LIMIT %s', (config[1], max(1, min(int(limit), 1000)))).fetchall()
+        docs = conn.execute('SELECT id,title,body,org_id FROM meadow_memory WHERE embedding_model IS DISTINCT FROM %s ORDER BY id LIMIT %s', (config[0], max(1, min(int(limit), 1000)))).fetchall()
     count = 0
     for doc in docs:
-        vector = _embed(doc['title'] + ' ' + doc['body'], config)
+        vector = _embed(doc['title'] + ' ' + doc['body'])
         with repo.connection() as conn:
             # Another writer may edit or delete the document during the API request.
             result = conn.execute('''UPDATE meadow_memory SET embedding=%s::vector,embedding_model=%s
                 WHERE id=%s AND title=%s AND body=%s AND org_id=%s''',
-                (vector, config[1], doc['id'], doc['title'], doc['body'], doc['org_id']))
+                (vector, config[0], doc['id'], doc['title'], doc['body'], doc['org_id']))
             count += result.rowcount
-    return {'indexed': count, 'model': config[1]}
+    return {'indexed': count, 'model': config[0]}
 
 
 def _has_vector(conn):
@@ -167,16 +172,16 @@ def search_memory(repo, org_id, query, limit=8):
                 FROM meadow_memory WHERE org_id=%s AND to_tsvector('english',search_text) @@ websearch_to_tsquery('english',%s)
                 ORDER BY score DESC,id LIMIT %s''', (query,org_id,query,limit * 4)).fetchall()
         config = _embedding_config()
-        vector_ready = config and _has_vector(conn) and conn.execute('SELECT 1 FROM meadow_memory WHERE org_id=%s AND embedding_model=%s LIMIT 1', (org_id,config[1])).fetchone()
+        vector_ready = config and _has_vector(conn) and conn.execute('SELECT 1 FROM meadow_memory WHERE org_id=%s AND embedding_model=%s LIMIT 1', (org_id,config[0])).fetchone()
     # Network call happens outside the SQL transaction.
     warning = None
     if vector_ready:
         try:
-            vector = _embed(query, config)
+            vector = _embed(query, 'RETRIEVAL_QUERY')
             with repo.connection() as conn:
                 semantic = conn.execute('''SELECT * FROM meadow_memory WHERE org_id=%s AND embedding_model=%s
                     AND embedding IS NOT NULL AND vector_dims(embedding)=vector_dims(%s::vector)
-                    ORDER BY embedding <=> %s::vector LIMIT %s''', (org_id,config[1],vector,vector,limit * 4)).fetchall()
+                    ORDER BY embedding <=> %s::vector LIMIT %s''', (org_id,config[0],vector,vector,limit * 4)).fetchall()
             merged = {}
             for ranking in (rows, semantic):
                 for rank, row in enumerate(ranking, 1):

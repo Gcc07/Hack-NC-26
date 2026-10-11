@@ -1,5 +1,7 @@
 """Run locally with: python -m flask --app backend run --port 5000."""
 
+from __future__ import annotations
+
 from pathlib import Path
 import os
 
@@ -17,7 +19,7 @@ def create_app(config=None, *, repository: Repository | None = None):
     app = Flask(__name__, static_folder=None)
     app.config.from_mapping(MAX_CONTENT_LENGTH=1_000_000,
                             STORAGE_BACKEND=os.getenv("STORAGE_BACKEND", "memory"),
-                            DATABASE_URL=os.getenv("DATABASE_URL", ""))
+                            DATABASE_URL=os.getenv("TIMESCALE_SERVICE_URL", ""))
     if config:
         app.config.update(config)
     # Unit tests remain isolated even if a developer has a real service in .env.
@@ -29,30 +31,38 @@ def create_app(config=None, *, repository: Repository | None = None):
             repository = InMemoryRepository()
         elif backend == "tiger":
             if not app.config["DATABASE_URL"]:
-                raise ValueError("Tiger storage requires DATABASE_URL in your local .env.")
+                raise ValueError("Tiger storage requires TIMESCALE_SERVICE_URL in your local .env.")
             from .tiger_repository import TigerRepository
             repository = TigerRepository(app.config["DATABASE_URL"])
         else:
             raise ValueError("STORAGE_BACKEND must be memory or tiger.")
     app.extensions["repository"] = repository
     app.register_blueprint(api)
-    try:
-        from .insights import insights_api
-        from .tiger_cli import register_commands
-        app.register_blueprint(insights_api)
-        register_commands(app)
-    except ImportError:
-        # Tiger insights/CLI modules are optional until that work lands.
-        pass
+    from .gemini import ai_api
+    from .insights import insights_api
+    from .tiger_cli import register_commands
+    app.register_blueprint(ai_api)
+    app.register_blueprint(insights_api)
+    register_commands(app)
 
     # Connection errors never echo a database URL or password into a response.
-    import psycopg
+    from .tiger_repository import TigerUnavailable
 
-    @app.errorhandler(psycopg.Error)
-    def database_error(error):
-        app.logger.warning("Tiger database request failed (%s)", type(error).__name__)
-        return jsonify(error={"code": "storage_unavailable", "message":
-            "Tiger Data is unavailable or not initialized. Check .env and run flask --app app tiger-init."}), 503
+    @app.errorhandler(TigerUnavailable)
+    def tiger_unavailable(error):
+        app.logger.warning("Tiger database request failed (%s)", error.detail or type(error).__name__)
+        return jsonify(error={"code": "storage_unavailable", "message": str(error)}), 503
+
+    try:
+        import psycopg
+    except ImportError:
+        psycopg = None
+    if psycopg is not None:
+        @app.errorhandler(psycopg.Error)
+        def database_error(error):
+            app.logger.warning("Tiger database request failed (%s)", type(error).__name__)
+            return jsonify(error={"code": "storage_unavailable", "message":
+                "Tiger Data is unavailable or not initialized. Check .env and run flask --app app tiger-init."}), 503
 
     @app.get("/")
     def index():

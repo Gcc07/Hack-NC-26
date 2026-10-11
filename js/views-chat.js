@@ -112,7 +112,15 @@
     const state = S();
     const [s, e] = M.roleShift(ev, role);
     const free = !M.hasShared(me) || M.isFree(M.userIntervals(state, me.id, ev.id), s, e);
-    const go = () => M.safe(() => M.act.claimRole(ev.id, role.id, me.id));
+    const go = () => M.safe(() => {
+      M.act.claimRole(ev.id, role.id, me.id);
+      const current = S().events[ev.id];
+      const prog = M.eventProgress(current);
+      const toast = document.getElementById('toast-root');
+      M.toast(`${role.name} claimed — ${prog.have} of ${prog.need} required spots filled. Saving…`);
+      const message = toast.lastElementChild;
+      if (message) { message.classList.add('bloom-toast'); message.prepend(M.icon('flower', 42)); }
+    });
     if (free) go();
     else M.confirm(`Your calendar shows you as busy during ${M.fmt.time(s)}–${M.fmt.time(e)}. Claim ${role.name} anyway?`, go);
   }

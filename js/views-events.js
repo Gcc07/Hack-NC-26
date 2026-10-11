@@ -35,7 +35,7 @@
           : h('span', { class: 'hint' }, 'Officers create events; everyone claims roles.')),
       items.length
         ? h('div', { class: 'event-grid' }, items.map((ev) => eventCard(ev, state, me)))
-        : h('div', { class: 'empty' }, h('p', null, cur === 'upcoming' ? 'Nothing planned yet.' : 'Nothing here.'),
+        : h('div', { class: 'empty' }, M.icon('leaf', 54), h('p', null, cur === 'upcoming' ? 'Plant the first idea.' : 'A quiet patch of meadow.'),
             cur === 'upcoming' ? h('p', { class: 'hint' }, 'Head to the Schedule tab and ask Dewey for the best times.') : null));
   }
 
@@ -48,8 +48,7 @@
       h('div', { class: 'hint' }, '🕒 ' + M.fmt.range(ev.start, ev.end)),
       ev.location ? h('div', { class: 'hint' }, '📍 ' + ev.location) : null,
       prog.need
-        ? h('div', null, h('div', { class: 'meter' }, h('i', { style: { width: Math.round(prog.ratio * 100) + '%' } })),
-            h('small', null, `${prog.have} of ${prog.need} required spots filled`))
+        ? M.gardenProgress(prog)
         : h('small', null, 'No required roles'),
       mine.length ? h('div', { class: 'chip free' }, 'You: ' + mine.map((r) => r.name).join(', ')) : null);
   }
@@ -115,7 +114,7 @@
     const checked = (ev.attendance || []).includes(me.id);
     const codeIn = h('input', { placeholder: 'MDW-1234', 'data-keep': 'checkin-' + ev.id, 'aria-label': 'Check-in code', maxlength: 12 });
     const checkin = h('section', { class: 'card' },
-      h('h2', null, '✅ Check-in'),
+      h('h2', { class: 'icon-label' }, M.icon('calendar'), 'Check-in'),
       officer
         ? h('div', null, h('p', { class: 'hint' }, 'Show or read out this code at the event:'), h('div', { class: 'big-code' }, ev.checkinCode),
             h('p', { class: 'hint' }, `${(ev.attendance || []).length} checked in`),
@@ -130,7 +129,7 @@
     const notes = state.guestbook.filter((g) => g.eventId === ev.id).sort((a, b) => a.ts - b.ts);
     const gbIn = h('input', { placeholder: 'Leave a short note for the next team…', maxlength: 300, 'data-keep': 'gb-' + ev.id, 'aria-label': 'Guestbook note' });
     const guest = h('section', { class: 'card' },
-      h('h2', null, '📖 Guestbook'),
+      h('h2', { class: 'icon-label' }, M.icon('folder'), 'Guestbook'),
       notes.length ? h('ul', { class: 'guestbook' }, notes.map((g) => h('li', null, h('q', null, g.text), h('small', null, ' — ' + ((state.users[g.userId] || {}).name || 'someone'))))) : h('p', { class: 'hint' }, 'No notes yet.'),
       now >= ev.start && !cancelled
         ? h('form', { class: 'row', onSubmit: (e) => { e.preventDefault(); const t = gbIn.value; gbIn.value = ''; M.act.addGuestbook(ev.id, me.id, t); } }, gbIn, h('button', { class: 'btn', type: 'submit' }, 'Sign'))
@@ -143,12 +142,13 @@
         h('p', null, '🕒 ' + M.fmt.range(ev.start, ev.end)),
         ev.location ? h('p', null, '📍 ' + ev.location) : null,
         ev.description ? h('p', null, ev.description) : null,
+        prog.need ? M.gardenProgress(prog) : null,
         ev.status === 'pending' ? h('p', { class: 'notice' }, `Pending — ${M.plural(prog.open, 'required spot')} still open. It confirms automatically once every required role is claimed.`) : null,
         h('div', { class: 'row wrap' },
           h('button', { class: 'btn small', onClick: () => M.download(ev.title.replace(/\W+/g, '-') + '.ics', eventIcs(ev), 'text/calendar') }, '📆 Add to my calendar'),
           officer && !cancelled && prog.open ? h('button', { class: 'btn small', onClick: () => { M.ui.channel = 'event:' + ev.id; M.act.postMessage('event:' + ev.id, me.id, '@dewey nudge'); M.toast('Dewey is drafting nudges in the event chat'); } }, '🤖 Draft nudges with Dewey') : null,
           officer && !cancelled ? h('button', { class: 'btn small danger', onClick: () => M.confirm('Cancel this event for everyone?', () => M.safe(() => M.act.cancelEvent(ev.id, me.id))) }, 'Cancel event') : null)),
-      h('section', { class: 'card' }, h('h2', null, '🙋 Roles'),
+      h('section', { class: 'card' }, h('h2', { class: 'icon-label' }, M.icon('people'), 'Roles'),
         ev.roles.length ? ev.roles.map(roleRow) : h('p', { class: 'hint' }, 'This event has no roles — just show up!')),
       checkin, guest,
       h('section', { class: 'card chat-embed' }, V.chatPanel('event:' + ev.id, '💬 Event chat', org, { placeholder: 'Coordinate with the crew…' })));
