@@ -28,7 +28,9 @@ def create_app(config=None, *, repository: Repository | None = None):
                             BEHIND_PROXY=os.getenv("MEADOW_BEHIND_PROXY", "").lower() in ("1", "true", "yes"),
                             GOOGLE_CLIENT_ID=os.getenv("GOOGLE_CLIENT_ID", "").strip(),
                             GOOGLE_CLIENT_SECRET=os.getenv("GOOGLE_CLIENT_SECRET", "").strip(),
-                            GOOGLE_REDIRECT_URI=os.getenv("GOOGLE_REDIRECT_URI", "").strip())
+                            GOOGLE_REDIRECT_URI=os.getenv("GOOGLE_REDIRECT_URI", "").strip(),
+                            # Shared secret so the Spectrum/meadow process can call /api without a browser session.
+                            BRIDGE_SECRET=os.getenv("MEADOW_BRIDGE_SECRET", "").strip())
     if config:
         app.config.update(config)
     if not app.config["SECRET_KEY"]:

@@ -149,6 +149,10 @@ def guard_api():
             return _error(403, "bad_origin", "Cross-site requests are not allowed.")
     if request.path.rstrip("/") in PUBLIC_PATHS or request.path in PUBLIC_PATHS:
         return None
+    # Trusted server-side bridge (meadow/Spectrum) — never exposed to the browser.
+    bridge_secret = current_app.config.get("BRIDGE_SECRET") or ""
+    if bridge_secret and request.headers.get("X-Meadow-Bridge") == bridge_secret:
+        return None
     found = current_session()
     if found is None:
         return _error(401, "unauthenticated", "Sign in to continue.")

@@ -169,6 +169,208 @@
             foodRows.length ? h('div', null, h('h3', null, 'Food feedback'), h('ul', { class: 'guestbook' }, foodRows)) : null)
         : h('p', { class: 'hint' }, 'When members reply to Dewey by text, RSVPs and votes show up here.'));
 
+    // Officer: text participants via Dewey / Spectrum
+    const claimedRoleNames = [...new Set(ev.roles.filter((r) => r.claims.length).map((r) => r.name))];
+    const roleChecks = {};
+    claimedRoleNames.forEach((name) => {
+      roleChecks[name] = h('input', { type: 'checkbox', checked: true, 'data-role': name });
+    });
+    const audienceSel = h('select', { 'aria-label': 'Who to text', 'data-keep': 'imsg-aud-' + ev.id },
+      h('option', { value: 'roles' }, 'Role holders'),
+      h('option', { value: 'going' }, 'Marked going / late'),
+      h('option', { value: 'reminded' }, 'Already reminded'),
+      h('option', { value: 'org' }, 'Whole org (opted in)'));
+    const msgIn = h('textarea', {
+      rows: 3,
+      maxlength: 500,
+      placeholder: 'Write a text to send… (e.g. “Quad entrance is by the union — look for the green canopy.”)',
+      'data-keep': 'imsg-msg-' + ev.id,
+      'aria-label': 'Message to participants',
+    });
+    const remModeSel = h('select', { 'aria-label': 'Reminder message style', 'data-keep': 'imsg-rem-mode-' + ev.id },
+      h('option', { value: 'standard' }, 'Standard RSVP (Dewey asks YES / late / can’t)'),
+      h('option', { value: 'custom' }, 'Custom message (+ RSVP replies)'));
+    const remMsgIn = h('textarea', {
+      rows: 3,
+      maxlength: 500,
+      placeholder: 'Custom reminder… (e.g. “Bring your laptop — we’re in Manning 209. Reply YES if you’re still good.”)',
+      'data-keep': 'imsg-rem-msg-' + ev.id,
+      'aria-label': 'Custom reminder message',
+    });
+    const remWhenSel = h('select', { 'aria-label': 'When to send reminder', 'data-keep': 'imsg-rem-when-' + ev.id },
+      h('option', { value: 'now' }, 'Send now'),
+      h('option', { value: 'schedule' }, 'Schedule for a date & time'));
+    const defRem = (() => {
+      const t = ev.start && ev.start > Date.now() + 60 * 60 * 1000
+        ? new Date(ev.start - 2 * 60 * 60 * 1000)
+        : new Date(Date.now() + 60 * 60 * 1000);
+      const pad = (n) => String(n).padStart(2, '0');
+      return {
+        date: `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`,
+        time: `${pad(t.getHours())}:${pad(t.getMinutes())}`,
+      };
+    })();
+    const remDateIn = h('input', {
+      type: 'date',
+      value: defRem.date,
+      'data-keep': 'imsg-rem-date-' + ev.id,
+      'aria-label': 'Reminder date',
+    });
+    const remTimeIn = h('input', {
+      type: 'time',
+      value: defRem.time,
+      'data-keep': 'imsg-rem-time-' + ev.id,
+      'aria-label': 'Reminder time',
+    });
+    const remCustomWrap = h('div', { style: remModeSel.value === 'custom' ? '' : 'display:none' },
+      h('label', null, 'Custom reminder text', remMsgIn));
+    const remScheduleWrap = h('div', { class: 'row wrap', style: remWhenSel.value === 'schedule' ? '' : 'display:none' },
+      h('label', null, 'Date', remDateIn),
+      h('label', null, 'Time', remTimeIn));
+    remModeSel.addEventListener('change', () => {
+      remCustomWrap.style.display = remModeSel.value === 'custom' ? '' : 'none';
+    });
+    const selectedRoles = () =>
+      claimedRoleNames.length
+        ? claimedRoleNames.filter((name) => roleChecks[name] && roleChecks[name].checked)
+        : null;
+    const previewTargets = () => {
+      if (!M.imsg || !M.imsg.enabled()) return { reach: [], skip: [], ids: [] };
+      const kind = audienceSel.value || 'roles';
+      const roles = selectedRoles();
+      const roleFilter = kind === 'roles' && claimedRoleNames.length ? (roles && roles.length ? roles : claimedRoleNames) : undefined;
+      const ids = M.imsg.participantIds(state, ev, kind, roleFilter);
+      const reach = M.imsg.reachable(state, ids);
+      const skip = ids.filter((id) => !M.imsg.canText(state.users[id]));
+      return { reach, skip, ids };
+    };
+    const remOpts = () => {
+      const kind = audienceSel.value || 'roles';
+      const roles = selectedRoles();
+      if (kind === 'roles' && claimedRoleNames.length && (!roles || !roles.length)) {
+        throw new Error('Select at least one role to text.');
+      }
+      const opts = {
+        kind,
+        roleFilter: kind === 'roles' && claimedRoleNames.length ? roles : undefined,
+        askRsvp: true,
+      };
+      if (remModeSel.value === 'custom') {
+        const text = String(remMsgIn.value || '').trim();
+        if (!text) throw new Error('Write a custom reminder message, or switch to Standard RSVP.');
+        opts.text = text;
+      }
+      if (remWhenSel.value === 'schedule') {
+        const dateStr = remDateIn.value;
+        const timeStr = remTimeIn.value;
+        if (!dateStr || !timeStr) throw new Error('Pick a date and time for the reminder.');
+        const sendAt = new Date(`${dateStr}T${timeStr}`).getTime();
+        if (!Number.isFinite(sendAt)) throw new Error('That date/time looks invalid.');
+        if (sendAt <= Date.now() + 2000) throw new Error('Pick a future date and time.');
+        opts.sendAt = sendAt;
+        opts.now = false;
+      } else {
+        opts.now = true;
+      }
+      return opts;
+    };
+    const prev = previewTargets();
+    const scheduled = (ev.imessage && ev.imessage.scheduledReminders) || [];
+    const imsgActions = officer && !cancelled && M.imsg && M.imsg.enabled()
+      ? h('section', { class: 'card' },
+          h('h2', { class: 'icon-label' }, M.icon('chat'), 'Text participants'),
+          h('p', { class: 'hint' }, 'Bridge: ' + M.imsg.statusLabel() + '. Only members who enabled iMessage under Me get texts.'),
+          h('label', null, 'Audience', audienceSel),
+          claimedRoleNames.length
+            ? h('div', { class: 'row wrap' },
+                h('small', { class: 'hint' }, 'Roles (when audience is Role holders):'),
+                claimedRoleNames.map((name) =>
+                  h('label', { class: 'check' }, roleChecks[name], name)))
+            : h('p', { class: 'hint' }, 'No role claims yet — “Role holders” falls back to opted-in org members.'),
+          h('p', null,
+            prev.reach.length
+              ? h('span', { class: 'chip free' }, `Will text ${M.plural(prev.reach.length, 'person', 'people')}`)
+              : h('span', { class: 'pill warn' }, 'Nobody reachable yet'),
+            prev.skip.length
+              ? h('span', { class: 'hint' }, ` · ${M.plural(prev.skip.length, 'person', 'people')} missing phone/opt-in`)
+              : null),
+          prev.reach.length
+            ? h('ul', { class: 'guestbook' }, prev.reach.map((id) => {
+                const u = state.users[id];
+                return h('li', null,
+                  h('span', { class: 'chip person' }, u && M.avatar(u, 18), u ? M.firstName(u.name) : id));
+              }))
+            : null,
+          h('label', null, 'Custom message', msgIn),
+          h('div', { class: 'row wrap' },
+            h('button', {
+              class: 'btn primary',
+              disabled: !prev.reach.length,
+              onClick: () => M.safe(async () => {
+                const kind = audienceSel.value || 'roles';
+                const roles = selectedRoles();
+                if (kind === 'roles' && claimedRoleNames.length && (!roles || !roles.length)) {
+                  throw new Error('Select at least one role to text.');
+                }
+                const res = await M.imsg.sendText(
+                  ev,
+                  me.id,
+                  msgIn.value,
+                  kind,
+                  kind === 'roles' && claimedRoleNames.length ? roles : undefined
+                );
+                msgIn.value = '';
+                M.toast(`Sent to ${M.plural(res.reached, 'person', 'people')}`);
+                M.render();
+              }),
+            }, 'Send text'),
+            h('button', {
+              class: 'btn small',
+              onClick: () => M.safe(async () => {
+                const res = await M.imsg.sendSurvey(ev, me.id);
+                M.toast(`Food survey queued for ${M.plural(res.reached, 'person', 'people')}`);
+                M.render();
+              }),
+            }, 'Send food survey')),
+          h('hr'),
+          h('h3', { class: 'icon-label' }, M.icon('calendar'), 'RSVP reminder'),
+          h('p', { class: 'hint' }, 'Standard uses Dewey’s RSVP wording. Custom lets you write the text — replies still count as YES / late / can’t.'),
+          h('label', null, 'Message', remModeSel),
+          remCustomWrap,
+          h('label', null, 'When', remWhenSel),
+          remScheduleWrap,
+          scheduled.length
+            ? h('ul', { class: 'guestbook' }, scheduled.slice(-5).map((j) =>
+                h('li', null,
+                  h('small', null,
+                    (j.custom ? 'Custom' : 'Standard') +
+                      ' · ' + M.plural(j.count, 'person', 'people') +
+                      ' · ' + M.fmt.day(j.sendAt) + ', ' + M.fmt.time(j.sendAt)))))
+            : null,
+          (() => {
+            const remBtn = h('button', {
+              class: 'btn primary',
+              disabled: !prev.reach.length,
+              onClick: () => M.safe(async () => {
+                const opts = remOpts();
+                const res = await M.imsg.sendReminders(ev, me.id, opts);
+                if (res.scheduled) {
+                  M.toast(`Reminder scheduled for ${M.fmt.day(res.sendAt)}, ${M.fmt.time(res.sendAt)}`);
+                } else {
+                  M.toast(`RSVP reminder sent to ${M.plural(res.reached, 'person', 'people')}`);
+                  if (remModeSel.value === 'custom') remMsgIn.value = '';
+                }
+                M.render();
+              }),
+            }, remWhenSel.value === 'schedule' ? 'Schedule reminder' : 'Send reminder');
+            remWhenSel.addEventListener('change', () => {
+              remScheduleWrap.style.display = remWhenSel.value === 'schedule' ? '' : 'none';
+              remBtn.textContent = remWhenSel.value === 'schedule' ? 'Schedule reminder' : 'Send reminder';
+            });
+            return h('div', { class: 'row wrap' }, remBtn);
+          })())
+      : null;
+
     // guestbook
     const notes = state.guestbook.filter((g) => g.eventId === ev.id).sort((a, b) => a.ts - b.ts);
     const gbIn = h('input', { placeholder: 'Leave a short note for the next team…', maxlength: 300, 'data-keep': 'gb-' + ev.id, 'aria-label': 'Guestbook note' });
@@ -192,6 +394,7 @@
           h('button', { class: 'btn small', onClick: () => M.download(ev.title.replace(/\W+/g, '-') + '.ics', eventIcs(ev), 'text/calendar') }, M.icon('calendar', 19), 'Add to my calendar'),
           officer && !cancelled && prog.open ? h('button', { class: 'btn small', onClick: () => { M.ui.channel = 'event:' + ev.id; M.act.postMessage('event:' + ev.id, me.id, '@dewey nudge'); M.toast('Dewey is drafting nudges in the event chat'); } }, M.icon('drop', 19), 'Draft nudges with Dewey') : null,
           officer && !cancelled ? h('button', { class: 'btn small danger', onClick: () => M.confirm('Cancel this event for everyone?', () => M.safe(() => M.act.cancelEvent(ev.id, me.id))) }, 'Cancel event') : null)),
+      imsgActions,
       bridge,
       h('section', { class: 'card' }, h('h2', { class: 'icon-label' }, M.icon('people'), 'Roles'),
         ev.roles.length ? ev.roles.map(roleRow) : h('p', { class: 'hint' }, 'This event has no roles — just show up!')),

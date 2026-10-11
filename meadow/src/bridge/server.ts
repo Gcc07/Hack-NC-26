@@ -57,12 +57,90 @@ function eventLabel(event: {
   return "the scheduled time";
 }
 
+type ReminderJob = {
+  id: string;
+  runAt: number;
+  timer: ReturnType<typeof setTimeout>;
+};
+
 /**
  * HTTP surface expected by js/imessage.js.
  * Runs alongside the Spectrum loop in the same meadow process.
  */
 export function startBridgeServer(opts: BridgeOptions): http.Server {
   const { repo, port, mode, sendText, composeSms } = opts;
+  const scheduled: ReminderJob[] = [];
+
+  const runReminderSend = async (input: {
+    event: {
+      id: string;
+      orgId: string;
+      title?: string;
+      start?: number;
+      location?: string;
+    };
+    recipients: Array<{ userId: string; roleNames?: string[] }>;
+    text?: string;
+    askRsvp?: boolean;
+  }): Promise<{ reached: number; skipped: string[] }> => {
+    const { event, recipients } = input;
+    const askRsvp = input.askRsvp !== false;
+    const state = await repo.load();
+    let reached = 0;
+    const skipped: string[] = [];
+    const when = eventLabel(event);
+    const fallback =
+      `🌊 ${event.title || "Event"} reminder (${when}). ` +
+      "Reply YES, I can't make it, or say if you're running late.";
+    let prompt =
+      typeof input.text === "string" && input.text.trim()
+        ? input.text.trim().slice(0, 500)
+        : composeSms
+          ? await composeSms({
+              kind: "reminder",
+              title: event.title || "Event",
+              org: event.orgId || "your org",
+              when,
+              fallback,
+            })
+          : fallback;
+    if (!prompt) prompt = fallback;
+
+    for (const recipient of recipients) {
+      const member = state.members[recipient.userId];
+      if (!member?.phone) {
+        skipped.push(recipient.userId);
+        continue;
+      }
+      if (askRsvp) {
+        const created = await repo.createPendingQuestion({
+          kind: "rsvp",
+          orgId: event.orgId,
+          eventId: event.id,
+          memberId: recipient.userId,
+          prompt,
+        });
+        if (!created.ok) {
+          skipped.push(recipient.userId);
+          continue;
+        }
+      }
+
+      if (mode === "live" && sendText) {
+        try {
+          await sendText(member.phone, prompt);
+          reached += 1;
+        } catch (error) {
+          console.error("[meadow] reminder send failed", recipient.userId, error);
+          skipped.push(recipient.userId);
+        }
+      } else {
+        console.log(`[meadow:dry] would text ${member.phone}: ${prompt}`);
+        reached += 1;
+      }
+    }
+    return { reached, skipped };
+  };
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -137,6 +215,12 @@ export function startBridgeServer(opts: BridgeOptions): http.Server {
           };
           recipients?: Array<{ userId: string; roleNames?: string[] }>;
           now?: boolean;
+          /** Custom SMS body; omit for standard Dewey RSVP copy. */
+          text?: string;
+          /** Unix ms — if in the future, schedule instead of sending immediately. */
+          sendAt?: number;
+          /** When true (default), open an RSVP pending question for replies. */
+          askRsvp?: boolean;
         };
         const event = body.event;
         const recipients = body.recipients || [];
@@ -145,58 +229,64 @@ export function startBridgeServer(opts: BridgeOptions): http.Server {
           return;
         }
 
-        const state = await repo.load();
-        let reached = 0;
-        const skipped: string[] = [];
-        const when = eventLabel(event);
-        const fallback =
-          `🌊 ${event.title || "Event"} reminder (${when}). ` +
-          "Reply YES, I can't make it, or say if you're running late.";
-        const prompt = composeSms
-          ? await composeSms({
-              kind: "reminder",
-              title: event.title || "Event",
-              org: event.orgId || "your org",
-              when,
-              fallback,
-            })
-          : fallback;
-
-        for (const recipient of recipients) {
-          const member = state.members[recipient.userId];
-          if (!member?.phone) {
-            skipped.push(recipient.userId);
-            continue;
-          }
-          const created = await repo.createPendingQuestion({
-            kind: "rsvp",
+        const payload = {
+          event: {
+            id: event.id,
             orgId: event.orgId,
-            eventId: event.id,
-            memberId: recipient.userId,
-            prompt,
-          });
-          if (!created.ok) {
-            skipped.push(recipient.userId);
-            continue;
-          }
+            title: event.title,
+            start: event.start,
+            location: event.location,
+          },
+          recipients,
+          text: typeof body.text === "string" ? body.text : undefined,
+          askRsvp: body.askRsvp !== false,
+        };
 
-          if (mode === "live" && sendText) {
-            try {
-              await sendText(member.phone, prompt);
-              reached += 1;
-            } catch (error) {
-              console.error("[meadow] reminder send failed", recipient.userId, error);
-              skipped.push(recipient.userId);
-            }
-          } else {
-            console.log(
-              `[meadow:dry] would text ${member.phone}: ${prompt}`
-            );
-            reached += 1;
+        const sendAt =
+          typeof body.sendAt === "number" && Number.isFinite(body.sendAt)
+            ? body.sendAt
+            : 0;
+        const delay = sendAt - Date.now();
+        if (!body.now && delay > 2000) {
+          if (delay > 1000 * 60 * 60 * 24 * 30) {
+            json(res, 400, { error: "sendAt must be within 30 days" });
+            return;
           }
+          const jobId = `rem_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+          const timer = setTimeout(() => {
+            const idx = scheduled.findIndex((j) => j.id === jobId);
+            if (idx >= 0) scheduled.splice(idx, 1);
+            void runReminderSend(payload).then(
+              (r) =>
+                console.log(
+                  `[meadow] scheduled reminder ${jobId} sent reached=${r.reached} skipped=${r.skipped.length}`
+                ),
+              (err) => console.error(`[meadow] scheduled reminder ${jobId} failed`, err)
+            );
+          }, delay);
+          scheduled.push({ id: jobId, runAt: sendAt, timer });
+          console.log(
+            `[meadow] scheduled reminder ${jobId} for ${new Date(sendAt).toISOString()} (${recipients.length} recipients)`
+          );
+          json(res, 200, {
+            reached: 0,
+            skipped: [],
+            scheduled: true,
+            jobId,
+            sendAt,
+          });
+          return;
         }
 
-        json(res, 200, { reached, skipped });
+        const result = await runReminderSend(payload);
+        json(res, 200, { ...result, scheduled: false });
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/reminders/scheduled") {
+        json(res, 200, {
+          jobs: scheduled.map((j) => ({ id: j.id, sendAt: j.runAt })),
+        });
         return;
       }
 

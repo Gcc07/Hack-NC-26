@@ -52,14 +52,23 @@ export interface BackendClient {
 class HttpBackendClient implements BackendClient {
   readonly baseUrl: string;
   readonly enabled = true;
+  private readonly bridgeSecret: string;
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, bridgeSecret = "") {
     this.baseUrl = baseUrl.replace(/\/$/, "");
+    this.bridgeSecret = bridgeSecret.trim();
+  }
+
+  private headers(json = false): Record<string, string> {
+    const h: Record<string, string> = {};
+    if (json) h["Content-Type"] = "application/json";
+    if (this.bridgeSecret) h["X-Meadow-Bridge"] = this.bridgeSecret;
+    return h;
   }
 
   async health(): Promise<boolean> {
     try {
-      const res = await fetch(`${this.baseUrl}/api/health`);
+      const res = await fetch(`${this.baseUrl}/api/health`, { headers: this.headers() });
       return res.ok;
     } catch {
       return false;
@@ -68,7 +77,7 @@ class HttpBackendClient implements BackendClient {
 
   async aiStatus(): Promise<boolean> {
     try {
-      const res = await fetch(`${this.baseUrl}/api/ai/status`);
+      const res = await fetch(`${this.baseUrl}/api/ai/status`, { headers: this.headers() });
       if (!res.ok) return false;
       const json = (await res.json()) as { enabled?: boolean };
       return !!json.enabled;
@@ -78,7 +87,9 @@ class HttpBackendClient implements BackendClient {
   }
 
   async get(resource: string, id: string): Promise<BackendRecord | null> {
-    const res = await fetch(`${this.baseUrl}/api/${resource}/${encodeURIComponent(id)}`);
+    const res = await fetch(`${this.baseUrl}/api/${resource}/${encodeURIComponent(id)}`, {
+      headers: this.headers(),
+    });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`GET ${resource}/${id} failed (${res.status})`);
     const json = (await res.json()) as { data: BackendRecord };
@@ -92,7 +103,7 @@ class HttpBackendClient implements BackendClient {
   ): Promise<BackendRecord> {
     const res = await fetch(`${this.baseUrl}/api/${resource}/${encodeURIComponent(id)}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: this.headers(true),
       body: JSON.stringify(body),
     });
     if (!res.ok) {
@@ -110,7 +121,7 @@ class HttpBackendClient implements BackendClient {
   ): Promise<BackendRecord> {
     const res = await fetch(`${this.baseUrl}/api/${resource}/${encodeURIComponent(id)}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: this.headers(true),
       body: JSON.stringify(body),
     });
     if (!res.ok) {
@@ -124,7 +135,7 @@ class HttpBackendClient implements BackendClient {
   async create(resource: string, body: Record<string, unknown>): Promise<BackendRecord> {
     const res = await fetch(`${this.baseUrl}/api/${resource}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: this.headers(true),
       body: JSON.stringify(body),
     });
     if (!res.ok) {
@@ -142,7 +153,7 @@ class HttpBackendClient implements BackendClient {
   ): Promise<string | null> {
     const res = await fetch(`${this.baseUrl}/api/ai/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: this.headers(true),
       body: JSON.stringify({ system, text, history }),
     });
     if (res.status === 503) return null;
@@ -157,7 +168,7 @@ class HttpBackendClient implements BackendClient {
   ): Promise<SmsIntentResult | null> {
     const res = await fetch(`${this.baseUrl}/api/ai/sms-intent`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: this.headers(true),
       body: JSON.stringify({ text, pending }),
     });
     if (res.status === 503) return null;
@@ -184,7 +195,7 @@ class HttpBackendClient implements BackendClient {
   }): Promise<string | null> {
     const res = await fetch(`${this.baseUrl}/api/ai/sms-copy`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: this.headers(true),
       body: JSON.stringify(input),
     });
     if (res.status === 503) return null;
@@ -231,5 +242,6 @@ export function createBackendClient(env: NodeJS.ProcessEnv = process.env): Backe
   // 127.0.0.1:5000 (gunicorn behind nginx). Override only if meadow is remote.
   const base = (env.BACKEND_URL || "http://127.0.0.1:5000").trim();
   if (!base || base === "off") return new DisabledBackendClient();
-  return new HttpBackendClient(base);
+  const bridgeSecret = (env.MEADOW_BRIDGE_SECRET || "").trim();
+  return new HttpBackendClient(base, bridgeSecret);
 }

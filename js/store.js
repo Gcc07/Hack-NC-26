@@ -2,6 +2,8 @@
 (function () {
   const M = window.Meadow;
   const listeners = new Set();
+  // Must match backend.repository.RESOURCES — Flask rejects PUT /api/state otherwise.
+  const RESOURCES = ['users', 'friendships', 'orgs', 'events', 'messages', 'flares', 'guestbook'];
   const empty = () => ({ users: {}, friendships: [], orgs: {}, events: {}, messages: [], flares: {}, guestbook: [] });
   let cache = empty();
   let revision = 0;
@@ -15,6 +17,20 @@
   let error = '';
   let pending = false;
   let pollTimer = null;
+
+  function serverState(state) {
+    const out = {};
+    for (const key of RESOURCES) out[key] = state[key];
+    return out;
+  }
+
+  function mergeClientOnly(prev, next) {
+    // polls / surveys / imessage live only in the browser (meadow bridge), not in Flask state.
+    for (const key of ['polls', 'surveys', 'imessage']) {
+      if (prev[key] != null) next[key] = prev[key];
+    }
+    return next;
+  }
 
   function emit() {
     if (pending) return;
@@ -54,7 +70,7 @@
 
   let restoring = false;
   function accept(data) {
-    cache = data.state;
+    cache = mergeClientOnly(cache, data.state);
     revision = data.revision;
     instance = data.instance;
     loaded = true;
@@ -94,7 +110,7 @@
     status();
     try {
       const data = await request({ method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: cache, revision, instance }) });
+        body: JSON.stringify({ state: serverState(cache), revision, instance }) });
       revision = data.revision;
       instance = data.instance;
       error = '';

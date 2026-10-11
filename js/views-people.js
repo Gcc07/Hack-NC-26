@@ -69,7 +69,7 @@
       officer
         ? h('section', { class: 'card' },
             h('h2', null, '📡 Messaging bridge'),
-            h('p', { class: 'hint' }, 'GroupMe is the most realistic bridge for student orgs (bot API). Outgoing messages are relayed only for members who opt in under Me. Incoming messages need a server-side webhook, so this demo includes a simulator in the chat sidebar. iMessage has no public API and is not supported.'),
+            h('p', { class: 'hint' }, 'GroupMe mirrors org chat for members who opt in under Me. iMessage (Dewey) texts role holders for reminders and surveys — members enable it under Me → iMessage. Bridge status: ' + (M.imsg && M.imsg.enabled() ? M.imsg.statusLabel() : 'not configured') + '.'),
             h('div', { class: 'row' }, bridgeType, bot, h('button', { class: 'btn', onClick: () => { M.act.setBridge(org.id, { type: bridgeType.value, botId: bot.value }); M.toast('Bridge settings saved'); } }, 'Save')))
         : null,
       h('section', { class: 'card' }, h('button', { class: 'btn danger small', onClick: () => M.confirm(`Leave ${org.name}?`, () => M.safe(() => { M.act.leaveOrg(org.id, me.id); M.go('#/'); })) }, 'Leave this org')));
@@ -104,6 +104,95 @@
     const evSel = h('select', { 'aria-label': 'Event' }, started.map((e) => h('option', { value: e.id }, `${e.title} (${M.fmt.day(e.start)})`)));
     const note = h('input', { placeholder: 'What worked? What should next year’s officers know?', maxlength: 300, 'data-keep': 'gb-board', 'aria-label': 'Guestbook note' });
 
+    // Dewey / iMessage intel across the org (officer view)
+    const planLabel = (p) =>
+      p.status === 'going' ? 'Going'
+        : p.status === 'late' ? `Late${p.minutes ? ` (~${p.minutes} min)` : ''}`
+          : p.status === 'cant' ? "Can't make it" : String(p.status || '');
+    const intelEvents = orgEvents
+      .map((ev) => {
+        const plans = ev.plans || {};
+        const votes = ev.meetingTimeVotes || {};
+        const food = ev.foodFeedback || {};
+        const planIds = Object.keys(plans);
+        const voteIds = Object.keys(votes);
+        const foodIds = Object.keys(food);
+        const gb = state.guestbook.filter((g) => g.eventId === ev.id);
+        if (!planIds.length && !voteIds.length && !foodIds.length && !gb.length) return null;
+        const counts = {
+          going: planIds.filter((id) => plans[id].status === 'going').length,
+          late: planIds.filter((id) => plans[id].status === 'late').length,
+          cant: planIds.filter((id) => plans[id].status === 'cant').length,
+        };
+        return { ev, plans, votes, food, planIds, voteIds, foodIds, gb, counts };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.ev.start - a.ev.start);
+    const optedIn = Object.keys(org.members).filter((id) => {
+      const u = state.users[id];
+      return u && u.phone && u.imessageOptIn;
+    });
+    const deweyIntel = officer
+      ? h('section', { class: 'card' },
+          h('h2', { class: 'icon-label' }, M.icon('chat'), 'Dewey intel (iMessage)'),
+          h('p', { class: 'hint' }, 'RSVPs, time prefs, and food notes members texted back. Open an event for the full thread.'),
+          h('p', null,
+            h('span', { class: 'chip free' }, M.plural(optedIn.length, 'member') + ' opted in'),
+            M.imsg && M.imsg.enabled()
+              ? h('span', { class: 'hint' }, ' · bridge ' + M.imsg.statusLabel())
+              : h('span', { class: 'hint' }, ' · bridge offline')),
+          intelEvents.length
+            ? h('div', { class: 'stack' }, intelEvents.map(({ ev, plans, votes, food, planIds, voteIds, foodIds, gb, counts }) =>
+                h('div', { class: 'flare-card' },
+                  h('div', { class: 'grow' },
+                    h('a', { href: '#/o/' + org.id + '/events/' + ev.id }, h('strong', null, ev.title)),
+                    h('div', { class: 'hint' }, M.fmt.day(ev.start) + (ev.imessage && ev.imessage.remindedAt ? ' · last texted ' + M.fmt.ago(ev.imessage.remindedAt) : '')),
+                    planIds.length
+                      ? h('p', null,
+                          h('span', { class: 'pill ok' }, counts.going + ' in'),
+                          ' ',
+                          h('span', { class: 'pill warn' }, counts.late + ' late'),
+                          ' ',
+                          h('span', { class: 'pill bad' }, counts.cant + " can't"))
+                      : null,
+                    planIds.length
+                      ? h('ul', { class: 'guestbook' }, planIds.map((uid) => {
+                          const u = state.users[uid];
+                          return h('li', null,
+                            (u ? M.firstName(u.name) : uid) + ' — ' + planLabel(plans[uid]));
+                        }))
+                      : null,
+                    voteIds.length
+                      ? h('div', null,
+                          h('small', null, 'Preferred times'),
+                          h('ul', { class: 'guestbook' }, voteIds.map((uid) => {
+                            const u = state.users[uid];
+                            return h('li', null,
+                              (u ? M.firstName(u.name) : uid) + ': ' + String(votes[uid].choice));
+                          })))
+                      : null,
+                    foodIds.length || gb.length
+                      ? h('div', null,
+                          h('small', null, 'Food / notes'),
+                          h('ul', { class: 'guestbook' }, [
+                            ...foodIds.map((uid) => {
+                              const u = state.users[uid];
+                              return h('li', null,
+                                h('q', null, String(food[uid].answer || '')),
+                                h('small', null, ' — ' + (u ? M.firstName(u.name) : uid) + ' (text)'));
+                            }),
+                            ...gb.slice(0, 6).map((g) => {
+                              const u = state.users[g.userId];
+                              return h('li', null,
+                                h('q', null, g.text),
+                                h('small', null, ' — ' + (u ? M.firstName(u.name) : 'someone')));
+                            }),
+                          ]))
+                      : null),
+                  h('a', { class: 'btn small', href: '#/o/' + org.id + '/events/' + ev.id }, 'Open'))))
+            : h('p', { class: 'hint' }, 'No SMS replies yet. Text role holders from an event, then replies land here and on that event’s page.'))
+      : null;
+
     // handoff
     const draft = M.ui.handoffDraft && M.ui.handoffDraft.orgId === org.id ? M.ui.handoffDraft.text : org.handoff ? org.handoff.text : '';
     const ta = h('textarea', { rows: 14, class: 'mono', 'data-keep': 'handoff-' + org.id, 'aria-label': 'Handoff document' });
@@ -112,6 +201,7 @@
     return h('div', { class: 'main-scroll pad two-col', 'data-scroll': 'main' },
       h('div', null,
         V.insightsPanel(org),
+        deweyIntel,
         h('section', { class: 'card' },
           h('h2', null, '🔥 Open flares'),
           open.length ? open.map(flareCard) : h('p', { class: 'hint' }, 'No open flares. When someone drops a role, it shows up here so anyone can claim it.'),
@@ -224,6 +314,45 @@
             friendIn.value = '';
             M.toast('You and ' + M.firstName(u.name) + ' are friends now');
           } }, 'Add'))),
+        isMe && M.imsg && M.imsg.enabled()
+          ? h('section', { class: 'card' },
+              h('h2', null, '📱 iMessage (Dewey)'),
+              h('p', { class: 'hint' }, 'Officers can text you about event roles (reminders, RSVP, food surveys). Bridge: ' + M.imsg.statusLabel() + '.'),
+              (() => {
+                const phoneIn = h('input', {
+                  type: 'tel',
+                  value: me.phone || '',
+                  placeholder: '+1 555 555 0100',
+                  maxlength: 40,
+                  'data-keep': 'imsg-phone',
+                  'aria-label': 'Phone number for iMessage',
+                });
+                const opted = !!me.imessageOptIn;
+                return h('div', null,
+                  h('label', null, 'Phone', phoneIn),
+                  me.imessageError ? h('p', { class: 'notice' }, me.imessageError) : null,
+                  h('div', { class: 'row wrap' },
+                    h('button', {
+                      class: 'btn primary',
+                      onClick: () => M.safe(async () => {
+                        await M.imsg.savePhone(me.id, phoneIn.value, true);
+                        M.toast('iMessage enabled — officers can text your roles');
+                        M.render();
+                      }),
+                    }, opted ? 'Update & keep enabled' : 'Enable iMessage'),
+                    opted
+                      ? h('button', {
+                          class: 'btn small',
+                          onClick: () => M.safe(async () => {
+                            await M.imsg.savePhone(me.id, phoneIn.value || me.phone, false);
+                            M.toast('iMessage turned off');
+                            M.render();
+                          }),
+                        }, 'Disable')
+                      : null),
+                  opted ? h('p', null, h('span', { class: 'chip free' }, 'Opted in'), ' Dewey can text this number.') : h('p', { class: 'hint' }, 'Not opted in yet.'));
+              })())
+          : null,
         orgs.length
           ? h('section', { class: 'card' },
               h('h2', null, '📡 Messaging bridge opt-in'),

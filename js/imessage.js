@@ -53,10 +53,19 @@
   };
 
   /* ------------------------------------------------------------------ officer actions */
-  function eventTargets(state, ev) {
+  function eventTargets(state, ev, roleFilter) {
     const withRoles = new Map();
-    ev.roles.forEach((r) => r.claims.forEach((id) => withRoles.set(id, [...(withRoles.get(id) || []), r.name])));
-    const ids = withRoles.size ? [...withRoles.keys()] : Object.keys(state.orgs[ev.orgId].members);
+    const filter = Array.isArray(roleFilter) && roleFilter.length ? new Set(roleFilter) : null;
+    ev.roles.forEach((r) => {
+      if (filter && !filter.has(r.name)) return;
+      r.claims.forEach((id) => withRoles.set(id, [...(withRoles.get(id) || []), r.name]));
+    });
+    // No role claims (or no roles on the event): fall back to the whole org, unless a role filter was set.
+    const ids = withRoles.size
+      ? [...withRoles.keys()]
+      : filter
+        ? []
+        : Object.keys(state.orgs[ev.orgId].members);
     return ids.map((id) => ({ userId: id, roleNames: withRoles.get(id) || [] }));
   }
   I.eventTargets = eventTargets;
@@ -67,22 +76,74 @@
     return went.size ? [...went] : Object.keys(state.orgs[ev.orgId].members);
   };
 
-  /** Reminders 24h and 2h before (or right now), each asking "1 in / 2 late / 3 can't make it". */
-  I.sendReminders = async function (ev, actorId, now) {
+  /**
+   * RSVP reminder — standard Dewey copy or a custom message; send now or at sendAt.
+   * Third arg may be `true` (send now) or options:
+   *   { now, sendAt, text, askRsvp, kind, roleFilter }
+   */
+  I.sendReminders = async function (ev, actorId, nowOrOpts, roleFilter) {
     await requireUp();
     const state = S();
     if (!M.isOfficer(state.orgs[ev.orgId], actorId)) throw new Error('Only officers can text reminders.');
-    const targets = eventTargets(state, ev).filter((t) => I.canText(state.users[t.userId]));
-    if (!targets.length) throw new Error('Nobody on this event has turned on iMessage yet.');
-    const res = await api('/reminders', { event: eventInfo(ev), recipients: targets, now: !!now });
-    M.store.update((s) => {
-      const e = s.events[ev.id];
-      e.imessage = e.imessage || {};
-      e.imessage.reminded = [...new Set([...(e.imessage.reminded || []), ...targets.map((t) => t.userId)])];
-      e.imessage.remindedAt = Date.now();
-    });
-    const what = now ? 'asked if they’re still good' : 'will get reminders 24 hours and 2 hours before';
-    say('event:' + ev.id, `📱 ${M.plural(res.reached, 'person', 'people')} ${what} by iMessage. Replies (in / running late / can’t make it) show up here.`);
+    const opts =
+      nowOrOpts && typeof nowOrOpts === 'object'
+        ? nowOrOpts
+        : { now: !!nowOrOpts, roleFilter };
+    const kind = opts.kind || 'roles';
+    const filter = opts.roleFilter !== undefined ? opts.roleFilter : roleFilter;
+    const all =
+      kind === 'roles'
+        ? eventTargets(state, ev, filter)
+        : I.participantIds(state, ev, kind, filter).map((userId) => ({ userId, roleNames: [] }));
+    const targets = all.filter((t) => I.canText(state.users[t.userId]));
+    if (!targets.length) {
+      if (all.length) throw new Error('People are listed, but none have turned on iMessage under Me yet.');
+      throw new Error(filter && filter.length
+        ? 'Nobody has claimed the selected roles yet.'
+        : 'Nobody in that group has turned on iMessage yet.');
+    }
+    const text = typeof opts.text === 'string' ? opts.text.trim().slice(0, 500) : '';
+    const sendAt =
+      typeof opts.sendAt === 'number' && Number.isFinite(opts.sendAt) ? opts.sendAt : 0;
+    const now = opts.now !== false && (!sendAt || sendAt <= Date.now() + 2000);
+    const body = {
+      event: eventInfo(ev),
+      recipients: targets,
+      now: !!now,
+      askRsvp: opts.askRsvp !== false,
+    };
+    if (text) body.text = text;
+    if (!now && sendAt) body.sendAt = sendAt;
+    const res = await api('/reminders', body);
+    if (!res.scheduled) {
+      M.store.update((s) => {
+        const e = s.events[ev.id];
+        e.imessage = e.imessage || {};
+        e.imessage.reminded = [...new Set([...(e.imessage.reminded || []), ...targets.map((t) => t.userId)])];
+        e.imessage.remindedAt = Date.now();
+      });
+    } else {
+      M.store.update((s) => {
+        const e = s.events[ev.id];
+        e.imessage = e.imessage || {};
+        e.imessage.scheduledReminders = [
+          ...(e.imessage.scheduledReminders || []),
+          { jobId: res.jobId, sendAt: res.sendAt, count: targets.length, custom: !!text, ts: Date.now() },
+        ];
+      });
+    }
+    const roleNames = [...new Set(targets.flatMap((t) => t.roleNames))];
+    const roleBit = roleNames.length ? ` with ${roleNames.join(' / ')}` : '';
+    const style = text ? 'custom' : 'standard';
+    const what = res.scheduled
+      ? `will get a ${style} reminder at ${M.fmt.day(res.sendAt)}, ${M.fmt.time(res.sendAt)}`
+      : `got a ${style} RSVP reminder`;
+    say(
+      'event:' + ev.id,
+      `📱 ${M.plural(res.scheduled ? targets.length : res.reached, 'person', 'people')}${roleBit} ${what} by iMessage.` +
+        skippedNote(res.skipped.length) +
+        (opts.askRsvp === false ? '' : ' Replies (in / running late / can’t make it) show up here.')
+    );
     return res;
   };
 
@@ -99,6 +160,48 @@
       const prev = s.surveys[surveyId];
       s.surveys[surveyId] = { id: surveyId, eventId: ev.id, orgId: ev.orgId, sentTo: [...new Set([...(prev ? prev.sentTo : []), ...reach])], sendAt, responses: prev ? prev.responses : {} };
     });
+    return res;
+  };
+
+  /**
+   * Who can receive an officer text for this event.
+   * kind: roles | going | reminded | org
+   * roleFilter: optional role names when kind === 'roles'
+   */
+  I.participantIds = function (state, ev, kind, roleFilter) {
+    const org = state.orgs[ev.orgId];
+    if (!org) return [];
+    if (kind === 'org') return Object.keys(org.members);
+    if (kind === 'reminded') return (ev.imessage && ev.imessage.reminded) || [];
+    if (kind === 'going') {
+      const plans = ev.plans || {};
+      return Object.keys(plans).filter((id) => plans[id].status === 'going' || plans[id].status === 'late');
+    }
+    // roles (default)
+    return eventTargets(state, ev, roleFilter).map((t) => t.userId);
+  };
+
+  /** Freeform officer broadcast to opted-in participants. */
+  I.sendText = async function (ev, actorId, text, kind, roleFilter) {
+    await requireUp();
+    const state = S();
+    if (!M.isOfficer(state.orgs[ev.orgId], actorId)) throw new Error('Only officers can text participants.');
+    text = String(text || '').trim().slice(0, 500);
+    if (!text) throw new Error('Write a message first.');
+    const ids = I.participantIds(state, ev, kind || 'roles', roleFilter);
+    const reach = I.reachable(state, ids);
+    if (!reach.length) throw new Error('Nobody in that group has iMessage turned on under Me.');
+    const res = await api('/broadcast', {
+      event: eventInfo(ev),
+      recipients: reach.map((userId) => ({ userId })),
+      text,
+    });
+    const skipped = ids.length - reach.length;
+    say(
+      'event:' + ev.id,
+      `📱 Officer texted ${M.plural(res.reached, 'person', 'people')}: “${text.slice(0, 120)}${text.length > 120 ? '…' : ''}”` +
+        skippedNote(Math.max(0, skipped))
+    );
     return res;
   };
 

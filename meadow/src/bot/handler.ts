@@ -450,11 +450,17 @@ async function answerTime(
     };
   }
 
+  const state = await repo.load();
+  const eventTitle =
+    state.events[question.eventId]?.title ?? "the event";
+  const orgName =
+    state.organizations[question.orgId]?.name ?? "your org";
+
   const foodPrompt = dewey
     ? await dewey.composePrompt({
         kind: "food_feedback",
-        title: "Sample Meeting",
-        org: question.orgId,
+        title: eventTitle,
+        org: orgName,
         fallback: FALLBACK_FOOD,
       })
     : FALLBACK_FOOD;
@@ -500,9 +506,11 @@ async function answerFood(
       saved: false,
     };
   }
+  const title =
+    saved.state.events[question.eventId]?.title ?? "the event";
   return {
     replies: [
-      `Thanks — saved your food note for ${question.eventId} under ${member.name}.`,
+      `Thanks — got your food note for ${title}. The org can see it on the event.`,
     ],
     saved: true,
   };
