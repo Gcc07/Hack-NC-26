@@ -25,12 +25,15 @@ SCHEMAS = {
 }
 DEFAULTS = {
     "users": {"email": "", "photo": "", "busy": [], "statusBusy": [], "calendar": None,
-              "bridgeOptIn": {}, "presence": "offline", "away": "", "lastSeen": 0},
+              "bridgeOptIn": {}, "presence": "offline", "away": "", "lastSeen": 0,
+              "phone": "", "imessageOptIn": False, "imessageError": ""},
     "friendships": {},
     "orgs": {"emoji": "🌿", "inviteCode": "", "members": {},
              "bridge": {"type": "none", "botId": ""}, "handoff": None},
     "events": {"type": "Event", "location": "", "description": "", "status": "pending",
-               "createdBy": "", "checkinCode": "", "attendance": [], "roles": []},
+               "createdBy": "", "checkinCode": "", "attendance": [], "roles": [],
+               # iMessage bridge fields (per-event RSVP / votes / feedback — not recurring busy).
+               "plans": {}, "imessage": {}, "meetingTimeVotes": {}, "foodFeedback": {}},
     "messages": {"source": "app", "payload": None},
     "flares": {"status": "open", "reason": "", "claimedBy": None, "resolvedAt": None},
     "guestbook": {},
@@ -73,10 +76,11 @@ def validate(resource, body, *, existing=None):
         kind = NULLABLE_TYPES[key] if default is None else type(default)
         if default is None and value is None:
             continue
-        if not isinstance(value, kind) or isinstance(value, bool):
+        # bool is a subclass of int — only reject bool when the field is not bool-typed.
+        if not isinstance(value, kind) or (isinstance(value, bool) and kind is not bool):
             raise ValidationError(f"Invalid type for {key}.")
     for key, value in record.items():
-        if isinstance(value, (int, float)) and not number(value):
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and not number(value):
             raise ValidationError(f"{key} must be a finite number.")
     if resource == "users":
         if record["presence"] not in {"online", "away", "offline"}:
@@ -99,6 +103,15 @@ def validate(resource, body, *, existing=None):
             raise ValidationError("Invalid event status.")
         if any(not isinstance(uid, str) or not uid for uid in record["attendance"]):
             raise ValidationError("attendance must contain user IDs.")
+        if not isinstance(record["plans"], dict):
+            raise ValidationError("plans must be an object keyed by user ID.")
+        for uid, plan in record["plans"].items():
+            if (not isinstance(uid, str) or not uid or not isinstance(plan, dict)
+                    or plan.get("status") not in {"going", "late", "cant"}):
+                raise ValidationError("plans entries need status going|late|cant.")
+        for key in ("meetingTimeVotes", "foodFeedback", "imessage"):
+            if not isinstance(record[key], dict):
+                raise ValidationError(f"{key} must be an object.")
         ids = set()
         for role in record["roles"]:
             if not isinstance(role, dict) or not isinstance(role.get("id"), str) or not role["id"]:

@@ -6,6 +6,18 @@
  *   2. Add http://localhost:5000 and http://127.0.0.1:5000 as Authorized JavaScript origins.
  *   3. Paste the client ID below and run `python app.py` (file:// is not allowed by Google).
  */
-window.MEADOW_CONFIG = {
-  GOOGLE_CLIENT_ID: '',
-};
+(function () {
+  const host = typeof location !== "undefined" ? location.hostname : "127.0.0.1";
+  const local = host === "localhost" || host === "127.0.0.1";
+  // Local: meadow bridge on :5055. Deployed: nginx /imessage/ → 127.0.0.1:5055
+  const bridge = local
+    ? "http://127.0.0.1:5055"
+    : typeof location !== "undefined"
+      ? location.origin + "/imessage"
+      : "";
+
+  window.MEADOW_CONFIG = {
+    GOOGLE_CLIENT_ID: "",
+    IMESSAGE_BRIDGE_URL: bridge,
+  };
+})();
