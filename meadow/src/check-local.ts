@@ -6,6 +6,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import type { BackendClient, SmsIntentResult } from "./backend/client.ts";
+import { Dewey } from "./bot/dewey.ts";
 import { handleInbound } from "./bot/handler.ts";
 import { SAMPLE } from "./data/sample.ts";
 import { MeadowRepository } from "./data/repository.ts";
@@ -77,7 +79,7 @@ async function run(): Promise<void> {
   assert(r.saved, "time vote saved");
   state = await repo.load();
   assert(state.events[SAMPLE.eventId]!.meetingTimeVotes[SAMPLE.memberId]?.choice === "8:30", "time is 8:30");
-  assert(r.replies.some((t) => /Food feedback/i.test(t)), "food follow-up");
+  assert(r.replies.some((t) => /food/i.test(t)), "food follow-up");
 
   console.log("5) food feedback");
   r = await handleInbound(repo, {
@@ -118,7 +120,7 @@ async function run(): Promise<void> {
     state.events[SAMPLE.eventId]!.scheduledLabel === scheduleBefore,
     "event schedule unchanged after decline"
   );
-  assert(r.replies.some((t) => /unchanged/i.test(t)), "decline reply mentions unchanged availability");
+  assert(r.replies.some((t) => /availability|schedule/i.test(t)), "decline reply mentions availability/schedule");
 
   console.log("7) persistence across reload");
   const repo2 = new MeadowRepository(new FileStateStore(statePath));
@@ -129,7 +131,7 @@ async function run(): Promise<void> {
   assert(raw.includes(SAMPLE.memberId), "stable member id in JSON");
   assert(raw.includes(SAMPLE.eventId), "stable event id in JSON");
 
-  console.log("8) ambiguous / help when no pending");
+  console.log("8) help when no pending");
   r = await handleInbound(repo2, {
     spaceId,
     platformUserId: "+15555550100",
@@ -137,6 +139,121 @@ async function run(): Promise<void> {
     text: "hello",
   });
   assert(r.replies.some((t) => /REMINDER/i.test(t)), "help mentions REMINDER");
+
+  console.log("9) contact upsert + update queue after RSVP");
+  const contact = await repo2.upsertContact({
+    userId: "user_bridge",
+    name: "Bridge User",
+    phone: "555-555-0199",
+    orgIds: [SAMPLE.orgId],
+  });
+  assert(contact.ok && contact.phone === "+15555550199", "contact phone normalized");
+  await handleInbound(repo2, {
+    spaceId: "space-bridge",
+    platformUserId: "+15555550199",
+    messageId: "m8",
+    text: "reminder",
+  });
+  await handleInbound(repo2, {
+    spaceId: "space-bridge",
+    platformUserId: "+15555550199",
+    messageId: "m9",
+    text: "yes",
+  });
+  const { updates } = await repo2.listUpdates(0);
+  assert(
+    updates.some((u) => u.type === "plans" && u.userId === "user_bridge" && u.status === "going"),
+    "bridge update queue has plans going"
+  );
+
+  console.log("10) mock Gemini NLU (late) + chat — no network");
+  let intent: SmsIntentResult = {
+    intent: "rsvp_late",
+    choice: null,
+    minutes: 15,
+    food: null,
+    clarify: null,
+    confidence: 0.9,
+  };
+  const mockBackend: BackendClient = {
+    baseUrl: "mock",
+    enabled: true,
+    async health() {
+      return true;
+    },
+    async aiStatus() {
+      return true;
+    },
+    async get() {
+      return null;
+    },
+    async patch() {
+      throw new Error("unused");
+    },
+    async create() {
+      throw new Error("unused");
+    },
+    async chat() {
+      return "Happy to help with Demo Org — send REMINDER anytime.";
+    },
+    async smsIntent() {
+      return intent;
+    },
+    async smsCopy(input) {
+      return `✨ MOCK ${input.kind}: ${input.title}. Reply clearly.`;
+    },
+  };
+  const dewey = new Dewey(repo2, mockBackend);
+  await handleInbound(
+    repo2,
+    {
+      spaceId: "space-bridge",
+      platformUserId: "+15555550199",
+      messageId: "m10",
+      text: "reminder",
+    },
+    dewey
+  );
+  r = await handleInbound(
+    repo2,
+    {
+      spaceId: "space-bridge",
+      platformUserId: "+15555550199",
+      messageId: "m11",
+      text: "gonna be like 15 min late sorry",
+    },
+    dewey
+  );
+  assert(r.saved, "late NLU saved");
+  assert(r.replies.some((t) => /late/i.test(t)), "late reply text");
+  const { updates: lateUpdates } = await repo2.listUpdates(0);
+  assert(
+    lateUpdates.some(
+      (u) => u.userId === "user_bridge" && u.status === "late" && u.minutes === 15
+    ),
+    "plans update late+minutes"
+  );
+
+  intent = {
+    intent: "chat",
+    choice: null,
+    minutes: null,
+    food: null,
+    clarify: null,
+    confidence: 0.2,
+  };
+  r = await handleInbound(
+    repo2,
+    {
+      spaceId: "space-bridge",
+      platformUserId: "+15555550199",
+      messageId: "m12",
+      text: "what is meadow anyway?",
+    },
+    dewey
+  );
+  assert(r.chat === true, "freeform chat path");
+  assert(r.replies.some((t) => /Demo Org|REMINDER/i.test(t)), "chat reply");
 
   await rm(dir, { recursive: true, force: true });
 

@@ -108,3 +108,99 @@ def polish():
         return jsonify(text=generate(system, text).strip())
     except GeminiUnavailable as error:
         return jsonify(error={'code': 'ai_unavailable', 'message': str(error)}), 503
+
+
+@ai_api.post('/chat')
+def chat():
+    """Short iMessage-style chat turn. Used by the meadow bridge when Gemini is configured."""
+    text = _text('text', 4000)
+    body = request.get_json(silent=True) or {}
+    system = body.get('system')
+    if not isinstance(system, str) or not system.strip():
+        system = (
+            'You are Dewey, Meadow\'s friendly iMessage assistant for student organizations. '
+            'Keep replies to 1–3 short sentences. Do not claim you saved RSVPs or changed schedules '
+            'unless the user completed a structured YES / can\'t make it / time / food reply.'
+        )
+    else:
+        system = system.strip()[:8000]
+    history = body.get('history') or []
+    if not isinstance(history, list):
+        raise ValidationError('history must be a list of {role, content} objects.')
+    # Gemini generate() is single-turn; fold recent history into the user payload.
+    lines = []
+    for turn in history[-12:]:
+        if not isinstance(turn, dict):
+            continue
+        role = turn.get('role')
+        content = turn.get('content')
+        if role in {'user', 'assistant'} and isinstance(content, str) and content.strip():
+            lines.append(('Member' if role == 'user' else 'Dewey') + ': ' + content.strip()[:1000])
+    lines.append('Member: ' + text)
+    prompt = 'Conversation so far:\n' + '\n'.join(lines) + '\nDewey:'
+    try:
+        return jsonify(text=generate(system, prompt).strip(), model=CHAT_MODEL)
+    except GeminiUnavailable as error:
+        return jsonify(error={'code': 'ai_unavailable', 'message': str(error)}), 503
+
+
+@ai_api.post('/sms-intent')
+def sms_intent():
+    """Map a messy SMS reply onto a structured bridge intent (JSON)."""
+    text = _text('text', 2000)
+    body = request.get_json(silent=True) or {}
+    pending = body.get('pending') or []
+    if not isinstance(pending, list):
+        raise ValidationError('pending must be a list.')
+    pending_desc = []
+    for item in pending[:6]:
+        if isinstance(item, dict) and isinstance(item.get('kind'), str):
+            opts = item.get('options') if isinstance(item.get('options'), list) else []
+            pending_desc.append({'kind': item['kind'], 'options': opts[:5]})
+    system = (
+        'You classify student-org iMessage replies. Reply with ONLY JSON: '
+        '{"intent":"rsvp_accept"|"rsvp_decline"|"rsvp_late"|"pick_time"|"food_answer"|"clarify"|"chat",'
+        '"choice":string|null,"minutes":number|null,"food":string|null,"clarify":string|null,'
+        '"confidence":number}. '
+        'Rules: rsvp_late if they are coming but delayed; pick_time only when choosing among options; '
+        'food_answer when answering food feedback; clarify when ambiguous (set clarify to a short question); '
+        'chat for general conversation. confidence is 0-1. Never invent a save.'
+    )
+    user = json.dumps({'text': text, 'pending': pending_desc}, ensure_ascii=True)
+    try:
+        result = json.loads(generate(system, user, json_output=True))
+        if not isinstance(result, dict):
+            raise ValueError('not an object')
+        return jsonify(result=result, model=CHAT_MODEL)
+    except (GeminiUnavailable, ValueError) as error:
+        return jsonify(error={'code': 'ai_unavailable', 'message': str(error)}), 503
+
+
+@ai_api.post('/sms-copy')
+def sms_copy():
+    """Write short, flashy iMessage copy for reminders / polls / surveys."""
+    body = request.get_json(silent=True) or {}
+    kind = body.get('kind')
+    if kind not in {'reminder', 'meeting_time', 'food_feedback', 'availability'}:
+        raise ValidationError('kind must be reminder, meeting_time, food_feedback, or availability.')
+    title = body.get('title') if isinstance(body.get('title'), str) else 'our event'
+    org = body.get('org') if isinstance(body.get('org'), str) else 'your org'
+    when = body.get('when') if isinstance(body.get('when'), str) else ''
+    options = body.get('options') if isinstance(body.get('options'), list) else []
+    options = [str(o)[:40] for o in options if isinstance(o, (str, int, float))][:5]
+    system = (
+        'You write punchy iMessage copy for a student-org assistant named Dewey. '
+        'Return ONLY JSON: {"text": string}. Max 2 short sentences + a clear reply instruction. '
+        'No markdown. Friendly, specific, not corporate.'
+    )
+    user = json.dumps({
+        'kind': kind, 'org': org[:80], 'title': title[:80], 'when': when[:80], 'options': options,
+    }, ensure_ascii=True)
+    try:
+        result = json.loads(generate(system, user, json_output=True))
+        text = result.get('text') if isinstance(result, dict) else None
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError('missing text')
+        return jsonify(text=text.strip()[:500], model=CHAT_MODEL)
+    except (GeminiUnavailable, ValueError) as error:
+        return jsonify(error={'code': 'ai_unavailable', 'message': str(error)}), 503
