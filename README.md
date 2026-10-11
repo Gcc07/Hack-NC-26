@@ -1,7 +1,7 @@
 # Meadow
 ### Meet Everyone, Anywhere, Doing Ordinary Wonders
 
-**Discord for student org event planning.**
+**for student org event planning.**
 
 A coordination hub for student organizations. Officers and members share availability, an AI assistant proposes meeting and event times, members commit to specific roles (setup, tabling, food pickup, greeter), and everything runs through a group chat that also reaches people outside the app.
 
