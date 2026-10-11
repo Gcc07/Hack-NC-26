@@ -121,6 +121,7 @@ class TigerRepository:
     def get(self, resource, record_id): return self._read("get", resource, record_id)
     def snapshot(self): return self._read("snapshot")
     def create(self, resource, data): return self._write("create", resource, data)
+    def ensure(self, resource, record_id, data): return self._write("ensure", resource, record_id, data)
     def replace(self, resource, record_id, data, version): return self._write("replace", resource, record_id, data, version)
     def delete(self, resource, record_id): return self._write("delete", resource, record_id)
     def save_snapshot(self, state, revision, instance): return self._write("save_snapshot", state, revision, instance)
