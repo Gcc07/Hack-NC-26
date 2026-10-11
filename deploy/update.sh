@@ -46,6 +46,15 @@ fi
 echo "==> Installing dependencies"
 .venv/bin/pip install --quiet -r requirements.txt
 
+# Optional iMessage bridge (./meadow, systemd unit meadow-bridge). Skipped when not installed.
+BRIDGE_SERVICE="${BRIDGE_SERVICE:-meadow-bridge}"
+HAS_BRIDGE=0
+if systemctl cat "$BRIDGE_SERVICE" >/dev/null 2>&1 && [ -f meadow/package.json ]; then
+    HAS_BRIDGE=1
+    echo "==> Installing bridge dependencies (meadow/)"
+    (cd meadow && npm install --no-audit --no-fund --loglevel=error)
+fi
+
 if [ "${1:-}" = "--init-db" ]; then
     echo "==> Applying Tiger schema"
     .venv/bin/python -m flask --app app tiger-init
@@ -58,6 +67,10 @@ echo "==> Waiting for health check"
 for i in 1 2 3 4 5 6 7 8 9 10; do
     if body="$(curl -fsS --max-time 3 http://127.0.0.1:5000/api/health 2>/dev/null)"; then
         echo "==> OK: $body (version $after)"
+        if [ "$HAS_BRIDGE" = "1" ]; then
+            echo "==> Restarting $BRIDGE_SERVICE"
+            sudo systemctl restart "$BRIDGE_SERVICE" || echo "WARNING: could not restart $BRIDGE_SERVICE (see: journalctl -u $BRIDGE_SERVICE -n 40)" >&2
+        fi
         exit 0
     fi
     sleep 1
