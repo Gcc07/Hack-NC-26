@@ -672,3 +672,26 @@ body { -webkit-text-stroke: 0; letter-spacing: .01em; }
 @keyframes pond-shimmer { from { opacity: .12; } to { opacity: .4; } }
 .fx-off .pond-koi, .fx-off .pond-ripple { animation: none; }
 @media (prefers-reduced-motion: reduce) { .pond-koi, .pond-ripple { animation: none; } }
+
+/* Workspace hierarchy and a quieter, consistent desktop. */
+.login-hero .meadow-tagline { font-size: clamp(30px,3.6vw,46px); letter-spacing: -.035em; line-height: 1.16; max-width: 560px; margin: 0 0 22px; }
+.window h1, .org-title h1 { font-family: var(--font); font-weight: 700; font-size: 25px; letter-spacing: -.025em; }
+.org-title { flex-wrap: wrap; }
+.org-head { padding: 18px 20px 0; }
+.pad { padding: 22px; }
+.section-heading { margin-bottom: 17px; }
+.section-heading h2 { font-size: 23px; }
+.focus-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,210px),1fr)); gap: 14px; }
+.focus-card { display: flex; flex-direction: column; gap: 10px; padding: 18px; }
+.focus-card h3 { font-size: 19px; line-height: 1.25; margin: 0; }
+.focus-card p { font-size: 14px; color: var(--ink-soft); }
+.focus-card .btn { margin-top: auto; align-self: flex-start; }
+.eyebrow { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: #366579; }
+.event-card { display: flex; flex-direction: column; gap: 10px; padding: 24px 19px 18px; }
+.event-card h3 { font-size: 22px; line-height: 1.2; margin: 0; }
+.event-date { font-size: 16px; font-weight: 700; color: #255779; }
+.event-cta { margin-top: auto; padding-top: 12px; border-top: 1px solid #aec7a46b; color: #246339; font-weight: 700; }
+.chat-log { padding: 20px; }
+.role { padding: 17px; margin-bottom: 13px; }
+.wave { animation: none; }
+@media(max-width:760px) { .pad { padding: 15px; } .org-head { padding: 15px 14px 0; } .org-title h1 { font-size: 22px; } .login-hero .meadow-tagline { font-size: 33px; } }
