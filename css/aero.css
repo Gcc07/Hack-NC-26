@@ -474,11 +474,9 @@ ul.plain { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 6
     linear-gradient(180deg, #c5f59a 0%, #7ee05a 34%, #45c044 70%, #2a8d2a 100%);
   box-shadow: 0 -30px 50px rgba(190, 230, 255, .35) inset, 0 20px 40px rgba(10, 80, 20, .2);
 }
-#fx-hills { position: absolute; left: 0; right: 0; bottom: 0; height: max(140px, 24vh); overflow: hidden; }
-#fx-hills svg { display: block; width: 100%; height: 100%; }
-.hill { animation: hill-sway 14s ease-in-out infinite alternate; }
-.hill.h0 { animation-duration: 24s; } .hill.h1 { animation-duration: 19s; } .hill.h3 { animation-duration: 11s; animation-direction: alternate-reverse; }
-@keyframes hill-sway { from { transform: translateX(-14px); } to { transform: translateX(14px); } }
+/* Bottom scenery: Assets/bottom_small.png (transparent clouds, skyline, trees and grass), pinned to the bottom edge. */
+#fx-hills { position: absolute; left: 0; right: 0; bottom: 0; height: clamp(240px, 44vw, 70vh); overflow: hidden;
+  background: url("../Assets/bottom_small.png") center bottom / 100% auto no-repeat; }
 .fx-off #fx-sky, .fx-off #fx-sun, .fx-off #fx-bubbles, .fx-off #fx-orbs { display: none; }
 
 /* effects + sound toggles: two little glass orbs, bottom-left */
@@ -561,7 +559,6 @@ body { -webkit-text-stroke: 0; letter-spacing: .01em; }
 #fx-meadow { inset: 0 -24px; perspective: none; }
 .meadow-field { display: none; }
 .meadow-haze { bottom: 28vh; height: 24vh; background: radial-gradient(ellipse at center, #e7f6ce65, transparent 70%); }
-#fx-hills { height: 53vh; min-height: 270px; overflow: visible; }
 .wave-bg { width: 13vw; opacity: .32; }
 .login { max-width: 1280px; margin: auto; grid-template-columns: minmax(0,1fr) minmax(310px,390px); gap: clamp(28px,5vw,76px); padding: 48px clamp(28px,6vw,80px) 120px; align-content: center; }
 .hero-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 25px; }
@@ -590,6 +587,7 @@ body { -webkit-text-stroke: 0; letter-spacing: .01em; }
   .reel-pending .reel-col { visibility: visible; }
 }
 .login-hero .tagline { display: block; background: none; border: 0; border-radius: 0; padding: 0; margin: 0; max-width: 440px; font-family: var(--font); font-size: clamp(30px, 3.6vw, 48px); font-weight: 700; line-height: 1.12; letter-spacing: -.03em; color: #123d59; text-shadow: 0 2px 0 #ffffffa6; }
+.login-hero .tagline .hl { background: #1c5fd0; color: #fff; text-shadow: none; }
 .login-hero .lede { background: none; padding: 0; font-size: 18px; max-width: 400px; line-height: 1.5; margin-bottom: 24px; text-shadow: 0 1px #ffffff85; }
 .bullets { gap: 9px; }
 .bullets li { display: flex; align-items: center; gap: 12px; border-radius: 13px; width: 100%; max-width: 375px; padding: 10px 13px; background: linear-gradient(#ffffffeb,#eaf8ffd9); font-size: 14px; }
@@ -637,7 +635,6 @@ body { -webkit-text-stroke: 0; letter-spacing: .01em; }
   .bullets { gap: 6px; }
   .bullets li { max-width: none; padding: 8px 12px; }
   .login-card { width: 100%; max-width: 440px; margin: 0 auto; }
-  #fx-hills { height: 42vh; }
   .desk { padding: 8px 8px 80px; }
   .titlebar { flex-wrap: wrap; gap: 7px; }
   .titlebar .tagline-sm { display: none; }

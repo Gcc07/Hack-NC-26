@@ -63,26 +63,6 @@
     if (sky) { try { sky.destroy(); } catch { /* already gone */ } sky = null; }
   }
 
-  /* ================================================================== hills (stationary SVG landscape) */
-  function buildHills() {
-    const el = $('#fx-hills');
-    if (!el) return;
-    el.innerHTML = `<svg viewBox="0 0 1440 560" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="distant" x2="0" y2="1"><stop stop-color="#b8dda6"/><stop offset="1" stop-color="#659d65"/></linearGradient>
-        <radialGradient id="sunlit" cx=".28" cy=".08" r=".95"><stop stop-color="#d3ef83"/><stop offset=".3" stop-color="#8ac848"/><stop offset=".65" stop-color="#45923a"/><stop offset="1" stop-color="#174e36"/></radialGradient>
-        <radialGradient id="near" cx=".72" cy=".05" r=".85"><stop stop-color="#b6dd57"/><stop offset=".35" stop-color="#71af38"/><stop offset=".8" stop-color="#2d7435"/><stop offset="1" stop-color="#164c31"/></radialGradient>
-        <linearGradient id="front" x1=".1" y1="0" x2=".8" y2="1"><stop stop-color="#8bbd42"/><stop offset=".5" stop-color="#3c8538"/><stop offset="1" stop-color="#154e35"/></linearGradient>
-      </defs>
-      <path d="M-40 185 Q150 38 340 150 T740 140 T1130 90 T1480 140 V560 H-40Z" fill="url(#distant)"/>
-      <path d="M-40 280 C160 80 320 60 540 196 S880 300 1090 205 S1330 120 1480 178 V560 H-40Z" fill="url(#sunlit)"/>
-      <path d="M-40 280 C160 80 320 60 540 196 S880 300 1090 205 S1330 120 1480 178" fill="none" stroke="#efffc2" stroke-opacity=".42" stroke-width="2"/>
-      <path d="M-40 385 C190 450 420 360 635 290 S1020 152 1230 252 S1400 300 1480 290 V560 H-40Z" fill="url(#near)"/>
-      <path d="M-40 385 C190 450 420 360 635 290 S1020 152 1230 252 S1400 300 1480 290" fill="none" stroke="#e6f5a1" stroke-opacity=".3" stroke-width="2"/>
-      <path d="M-40 453 C240 335 400 350 650 445 S1080 535 1480 390 V560 H-40Z" fill="url(#front)"/>
-    </svg>`;
-  }
-
   /* ================================================================== rising bubbles: tsParticles */
   const TINTS = ['120,220,255', '150,235,170', '205,175,255', '255,255,255'];
   function bubbleSprite(tint) {
@@ -457,7 +437,6 @@
   /* ================================================================== boot */
   $('#fx-toggle-visual').addEventListener('click', () => fx.setVisual(!fx.visual));
   $('#fx-toggle-sound').addEventListener('click', () => fx.setSound(!fx.sound));
-  buildHills();
   applySound();
   applyVisual();
   if (!reduced) pointerRaf = requestAnimationFrame(smoothPointerLoop);
