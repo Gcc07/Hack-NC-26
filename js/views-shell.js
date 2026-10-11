@@ -69,7 +69,7 @@
     for (let i = 0; i < 3; i++) belowKeys.push('three', 'two', 'one', 'wide');
     const below = h('div', { class: 'reel-below', 'aria-hidden': 'true' }, belowKeys.map((k) => reelTile(k)));
     const belowBox = h('div', { class: 'reel-below-box' }, below);
-    const main = h('div', { class: 'reel-main-block' }, reelTile('wide', 'reel-main'), h('h1', { class: 'tagline' }, TAGLINE));
+    const main = h('div', { class: 'reel-main-block' }, reelTile('wide', 'reel-main'), h('h1', { class: 'tagline' }, 'Meet Everyone, ', h('span', { class: 'hl' }, 'Anywhere'), ', Doing Ordinary Wonders'));
     const col = h('div', { class: 'reel-col' }, above, main, belowBox);
     if (reelStart === null) reelStart = performance.now();
     const playing = performance.now() - reelStart < REEL_MS;
